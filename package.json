@@ -4,7 +4,7 @@
   "description": "Duke of Lizards Web",
   "repository": {
     "type": "git",
-    "url": "git+ssh@github.com:ErikMuir/dol-web.git"
+    "url": "git+ssh@github.com:robot-jones/dol-web.git"
   },
   "license": "ISC",
   "author": "RobotJones",
