@@ -35,3 +35,6 @@ next-env.d.ts
 
 # cached data
 /cache
+
+# local Claude Code context, not shared with the team
+CLAUDE.md
