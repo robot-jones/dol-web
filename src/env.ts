@@ -1,5 +1,9 @@
 import "dotenv/config";
 
 export const isWhiteList = (accountId: string | null): boolean => {
-  return accountId ? `${process.env.NEXT_PUBLIC_WHITE_LIST}`.includes(accountId) : false;
+  if (!accountId) return false;
+  const whiteList = `${process.env.NEXT_PUBLIC_WHITE_LIST}`
+    .split(",")
+    .map((id) => id.trim());
+  return whiteList.includes(accountId);
 };

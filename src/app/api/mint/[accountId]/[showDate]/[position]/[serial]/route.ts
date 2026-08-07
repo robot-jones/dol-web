@@ -8,6 +8,7 @@ import {
 import { EnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
+import { isWhiteList } from "@/env";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial] (post-transfer endpoint)
 
@@ -24,10 +25,9 @@ export async function POST(
 ): Promise<NextResponse<StandardPayload<boolean | string>>> {
   const { accountId, showDate, position, serial } = await params;
   const mintEnabled = getBoolean(EnvKeys.NEXT_PUBLIC_MINT_ENABLED);
-  const whiteList = getRequired(EnvKeys.NEXT_PUBLIC_WHITE_LIST);
   const hfbCollectionId = getRequired(EnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
-  if (!mintEnabled && !whiteList.includes(accountId)) {
+  if (!mintEnabled && !isWhiteList(accountId)) {
     return badRequest("Minting is disabled");
   }
 

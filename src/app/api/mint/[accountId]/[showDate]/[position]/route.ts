@@ -5,6 +5,7 @@ import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/ty
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { obtainLock } from "@erikmuir/dol-lib/server/dapp";
 import { badRequest, StandardPayload, success } from "@/utils";
+import { isWhiteList } from "@/env";
 
 // /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
 
@@ -26,12 +27,11 @@ export async function POST(
   const { showDate, position, accountId } = await params;
   
   const mintEnabled = getBoolean(EnvKeys.NEXT_PUBLIC_MINT_ENABLED);
-  const whiteList = getRequired(EnvKeys.NEXT_PUBLIC_WHITE_LIST);
   const hfbHbarPrice = getRequired(EnvKeys.NEXT_PUBLIC_HFB_HBAR_PRICE);
   const treasuryAccount = getRequired(EnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
   const hfbCollectionId = getRequired(EnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
-  if (!mintEnabled && !whiteList.includes(accountId)) {
+  if (!mintEnabled && !isWhiteList(accountId)) {
     return badRequest("Minting is disabled");
   }
 
