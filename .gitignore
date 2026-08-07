@@ -38,3 +38,4 @@ next-env.d.ts
 
 # local Claude Code context, not shared with the team
 CLAUDE.md
+.env*
