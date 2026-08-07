@@ -58,7 +58,7 @@
     "@walletconnect/qrcode-modal": "^1.8.0",
     "@walletconnect/utils": "^2.19.2",
     "hashconnect": "^3.0.13",
-    "next": "^15.1.7",
+    "next": "^15.5.23",
     "react": "^19.0.0",
     "react-click-away-listener": "^2.3.0",
     "react-dom": "^19.0.0",
