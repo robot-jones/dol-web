@@ -10,10 +10,10 @@ npm install
 
 ### Configure environment
 
-1. Copy the file `.env-example`, naming it `.env` (git is already configured to ignore this file).
+1. Copy the file `.env.example`, naming it `.env` (git is already configured to ignore this file).
 
 ```bash
-cp ./.env-example ./.env
+cp ./.env.example ./.env
 ```
 
 2. Open the newly created `.env` file and set an appropriate value for each environment variable (e.g. `AWS_REGION=us-east-1`)
