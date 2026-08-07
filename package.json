@@ -15,7 +15,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "reconcile-claims": "node scripts/reconcile-claims.mjs"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.8.0",
