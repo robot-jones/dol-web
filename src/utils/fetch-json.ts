@@ -17,9 +17,5 @@ export const fetchJson = async <T>(
   url: string,
   init: MyRequestInit = {}
 ): Promise<T> => {
-  init.headers = {
-    ...(init.headers || {}),
-    "x-api-key": `${process.env.NEXT_PUBLIC_API_TOKEN}`,
-  };
   return fetch(url, init).then((res) => res.json());
 };

@@ -5,15 +5,13 @@ describe("fetchJson", () => {
     jest.resetAllMocks();
   });
 
-  it("adds x-api-key header and returns json", async () => {
+  it("fetches and returns json", async () => {
     const mockResponse = { hello: "world" };
     (global.fetch) = jest.fn().mockResolvedValue({ json: () => Promise.resolve(mockResponse) });
 
     const result = await fetchJson<unknown>("/api/test");
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/test", expect.objectContaining({
-      headers: expect.objectContaining({ "x-api-key": `${process.env.NEXT_PUBLIC_API_TOKEN}` })
-    }));
+    expect(global.fetch).toHaveBeenCalledWith("/api/test", {});
     expect(result).toEqual(mockResponse);
   });
 });
