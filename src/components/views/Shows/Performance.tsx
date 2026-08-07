@@ -153,11 +153,6 @@ export const Performance = (): React.ReactNode => {
         : undefined;
     }
 
-    // Used for runbook: When NFT metadata fails to update
-    //-------------------------------------------------------------------------
-    // console.log("Setting attributes:", newAttributes);
-    //-------------------------------------------------------------------------
-
     setAttributes(newAttributes);
   }, [bgColor, donut, subject, track, setlist, setlists, song]);
 
@@ -259,7 +254,7 @@ export const Performance = (): React.ReactNode => {
       return;
     }
 
-    updateStatus(MintStatusDisplayText.AcquiringLock);
+    updateStatus(MintStatusDisplayText.Claiming);
     const { serial, txBytes } = await fetchStandardJson<PreTransferResponse>(
       `/api/mint/${accountId}/${date}/${position}`,
       {
@@ -273,7 +268,7 @@ export const Performance = (): React.ReactNode => {
       let error = "Unknown error";
       switch (serial) {
         case SerialErrorResponse.LOCK_NOT_ACQUIRED:
-          error = "Lock not acquired";
+          error = "Failed to claim performance";
           updateStatus(MintStatusDisplayText.LockNotAcquired);
           break;
         case SerialErrorResponse.ALREADY_MINTED:
@@ -283,6 +278,10 @@ export const Performance = (): React.ReactNode => {
         case SerialErrorResponse.NO_SUPPLY:
           error = "No supply available";
           updateStatus(MintStatusDisplayText.NoSupply);
+          break;
+        case SerialErrorResponse.METADATA_PUBLISH_FAILED:
+          error = "Failed to publish NFT metadata";
+          updateStatus(MintStatusDisplayText.MetadataPublishFailed);
           break;
         default:
           error = "Unknown error";
@@ -395,7 +394,7 @@ export const Performance = (): React.ReactNode => {
         <DolButton color="gray" roundedFull disabled>Already Minted</DolButton>
       );
     }
-    if (performance?.lockedUntil && performance.lockedUntil > Date.now()) {
+    if (performance?.lockedBy) {
       return (
         <DolButton color="gray" roundedFull disabled>Locked</DolButton>
       );
@@ -409,7 +408,7 @@ export const Performance = (): React.ReactNode => {
       (!mintEnabled && !whiteList) ||
       !Boolean(performance) ||
       [
-        MintStatusDisplayText.AcquiringLock,
+        MintStatusDisplayText.Claiming,
         MintStatusDisplayText.AlreadyMinted,
         MintStatusDisplayText.InitiatingTransfer,
         MintStatusDisplayText.UpdatingMetadata,
@@ -436,7 +435,7 @@ export const Performance = (): React.ReactNode => {
   };
 
   const getPageNote = (): React.ReactNode => {
-    if (!performance || performance?.serial || (performance?.lockedUntil && performance.lockedUntil > Date.now())) {
+    if (!performance || performance?.serial || performance?.lockedBy) {
       return null;
     }
 

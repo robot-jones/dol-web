@@ -62,7 +62,7 @@ export const MintStatusIndicator = ({
     const coalescedPerformance = { ...providedPerformance, ...fetchedPerformance };
     const notFound = Boolean(!coalescedPerformance);
     const isMinted = Boolean(coalescedPerformance?.serial);
-    const isLocked = Boolean(coalescedPerformance?.lockedUntil && coalescedPerformance.lockedUntil > Date.now());
+    const isLocked = Boolean(coalescedPerformance?.lockedBy);
     const newTextColor = performanceLoading || notFound ? "text-gray-medium"
       : isMinted ? "text-dol-red"
       : isLocked ? "text-dol-yellow"

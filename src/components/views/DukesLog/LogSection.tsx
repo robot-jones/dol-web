@@ -96,11 +96,11 @@ export const LogSection = ({
       case "NFT_METADATA_COMPOSE":
       case "NFT_METADATA_PUBLISH":
         return preRelease || !perfId ? "[pre-release]" : perfId;
-      case "PERFORMANCE_LOCK":
-      case "PERFORMANCE_UNLOCK":
+      case "PERFORMANCE_CLAIM":
+      case "PERFORMANCE_RELEASE":
         return `${perfId} ${onBehalfOf}`;
-      case "SERIAL_LOCK":
-      case "SERIAL_UNLOCK":
+      case "SERIAL_CLAIM":
+      case "SERIAL_RELEASE":
         return `${nftId} ${onBehalfOf}`;
       case "REFRESH_SHOW_DATA":
         return "[maintenance]";

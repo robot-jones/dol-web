@@ -3,11 +3,19 @@ import { Hbar, TransferTransaction } from "@hashgraph/sdk";
 import { EnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
-import { obtainLock } from "@erikmuir/dol-lib/server/dapp";
+import { claimPerformance, publishNftMetadata } from "@erikmuir/dol-lib/server/dapp";
+import { setMetadataCid, unlockPerformance, releaseSerial } from "@erikmuir/dol-lib/server/dynamo";
+import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { isWhiteList } from "@/env";
 
 // /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
+//
+// Claims the performance, then does the slow/failure-prone work (render +
+// 2 IPFS uploads) before any money moves - see PUNCHLIST.md Finding 1/Phase
+// 2. If metadata publishing fails, the claim is released immediately so
+// the performance doesn't sit stuck for a failure that happened before the
+// buyer ever saw a wallet prompt.
 
 export type PreTransferParams = {
   accountId: string;
@@ -25,7 +33,8 @@ export async function POST(
   { params }: { params: Promise<PreTransferParams> }
 ): Promise<NextResponse<StandardPayload<ServerPreTransferResponse | string>>> {
   const { showDate, position, accountId } = await params;
-  
+  const parsedPosition = parseInt(position);
+
   const mintEnabled = getBoolean(EnvKeys.NEXT_PUBLIC_MINT_ENABLED);
   const hfbHbarPrice = getRequired(EnvKeys.NEXT_PUBLIC_HFB_HBAR_PRICE);
   const treasuryAccount = getRequired(EnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
@@ -40,15 +49,40 @@ export async function POST(
     return badRequest("No attributes provided");
   }
 
-  const serial = await obtainLock(
+  const serial = await claimPerformance(
     accountId,
     showDate,
-    parseInt(position),
+    parsedPosition,
     attributes
   );
 
   if (serial <= 0) {
     return success({ serial });
+  }
+
+  const metadataCid = await publishNftMetadata(
+    hfbCollectionId,
+    serial,
+    showDate,
+    parsedPosition,
+    accountId,
+    attributes
+  );
+
+  const performanceId = getPerformanceId(showDate, parsedPosition);
+
+  if (!metadataCid) {
+    await unlockPerformance(showDate, parsedPosition, accountId);
+    await releaseSerial(hfbCollectionId, serial, performanceId);
+    return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
+  }
+
+  const setMetadataCidResult = await setMetadataCid(showDate, parsedPosition, accountId, metadataCid);
+  if (!setMetadataCidResult.success) {
+    console.error(`Failed to set metadataCid: ${setMetadataCidResult.reason}`);
+    await unlockPerformance(showDate, parsedPosition, accountId);
+    await releaseSerial(hfbCollectionId, serial, performanceId);
+    return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 
   const client = getHederaClient();
