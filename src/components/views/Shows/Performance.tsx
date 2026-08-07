@@ -358,7 +358,7 @@ export const Performance = (): React.ReactNode => {
     }
     return metadata ? (
       <Image
-        src={ipfsToHttps(metadata.image)}
+        src={ipfsToHttps(metadata.image, process.env.NEXT_PUBLIC_PINATA_GATEWAY)}
         alt={metadata.name}
         width={374}
         height={420}

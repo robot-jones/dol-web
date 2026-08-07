@@ -68,7 +68,7 @@ export const StashItem = ({
     return (
       <div className="flex items-start p-2 gap-2">
         <Image
-          src={ipfsToHttps(metadata.image)}
+          src={ipfsToHttps(metadata.image, process.env.NEXT_PUBLIC_PINATA_GATEWAY)}
           alt={metadata.name}
           width={80}
           height={80}
