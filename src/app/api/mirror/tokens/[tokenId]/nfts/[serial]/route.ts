@@ -21,6 +21,5 @@ export async function GET(
   }
   const metadataUri = atob(Buffer.from(tokenNftInfo.metadata).toString("utf8"));
   const metadata = await downloadMetadataFromPinata<NftMetadata>(metadataUri);
-  // console.log({ metadata });
   return success(metadata);
 }

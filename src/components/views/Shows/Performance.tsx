@@ -85,11 +85,6 @@ export const Performance = (): React.ReactNode => {
   
   const whiteList = isWhiteList(accountId);
 
-  // // Randomize the image attributes when the page loads
-  // useEffect(() => {
-  //   randomizeAttributes();
-  // }, []);
-
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
     if (setlist) {
