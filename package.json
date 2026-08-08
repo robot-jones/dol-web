@@ -18,8 +18,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "reconcile-claims": "node scripts/reconcile-claims.mjs"
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",

@@ -20,7 +20,7 @@ cp ./.env.example ./.env
 
 ## Testing
 
-Tests use Jest + React Testing Library. Config lives in `jest.config.js` and `jest.setup.ts`.
+Tests use Vitest + React Testing Library. Config lives in `vitest.config.mts` and `vitest.setup.ts`.
 
 ### Run tests:
 
@@ -32,19 +32,6 @@ npm run test
 
 ```bash
 npm run test:watch
-```
-
-## Admin scripts
-
-### Reconcile stuck mint claims
-
-The mint pipeline claims a performance before payment completes, with no
-expiry - if a buyer's tab closes mid-flow, the claim sits there until
-someone looks at it (see `PUNCHLIST.md` Phase 2).
-
-```bash
-npm run reconcile-claims                          # list stuck claims
-npm run reconcile-claims -- --release <date> <position>  # release one
 ```
 
 ## UI Routes
