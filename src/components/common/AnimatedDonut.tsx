@@ -1,6 +1,6 @@
 import { twMerge } from "tailwind-merge";
-import { DolColor, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
-import { getTwDolColor } from "@erikmuir/dol-lib/dapp";
+import { DolColor } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 
 type AnimatedDonutProps = {
   sizeInPixels?: number;

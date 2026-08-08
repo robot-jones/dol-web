@@ -1,6 +1,6 @@
 import { twMerge } from "tailwind-merge";
-import { type DolColor, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
-import { getTwDolColor } from "@erikmuir/dol-lib/dapp";
+import { type DolColor } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 
 export type ItemCountPillProps = {
   item: string;

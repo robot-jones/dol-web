@@ -1,37 +1,8 @@
 import type { Config } from "tailwindcss";
 
-const percentages = [0, 10, 25, 33, 50, 66, 75];
-
-const dolColors = [
-  "black",
-  "white",
-  "dol-dark",
-  ...percentages.map((perc) => `dol-dark/${perc}`),
-  "dol-light",
-  ...percentages.map((perc) => `dol-light/${perc}`),
-  "dol-blue",
-  ...percentages.map((perc) => `dol-blue/${perc}`),
-  "dol-green",
-  ...percentages.map((perc) => `dol-green/${perc}`),
-  "dol-red",
-  ...percentages.map((perc) => `dol-red/${perc}`),
-  "dol-yellow",
-  ...percentages.map((perc) => `dol-yellow/${perc}`),
-];
-
-const safelist = [
-  ...dolColors.map((dolColor) => `text-${dolColor}`),
-  ...dolColors.map((dolColor) => `bg-${dolColor}`),
-  ...dolColors.map((dolColor) => `border-${dolColor}`),
-  ...dolColors.map((dolColor) => `[&::-webkit-media-controls-panel]:bg-${dolColor}`),
-  "border-l-gray-dark",
-];
-
 export default {
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     colors: {
@@ -115,5 +86,4 @@ export default {
     preflight: false,
   },
   plugins: [],
-  safelist,
 } satisfies Config;

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { twMerge } from "tailwind-merge";
-import { getEraColor, getTwDolColor, getVenueLocation } from "@erikmuir/dol-lib/dapp";
-import { TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getEraColor, getVenueLocation } from "@erikmuir/dol-lib/dapp";
 import { toFriendlyDate } from "@erikmuir/dol-lib/utils";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { Loading } from "@/components/common/Loading";
 import { MintStatusIndicator } from "@/components/common/MintStatusIndicator";
 import { useSetlistsBySongSlug } from "@/hooks";

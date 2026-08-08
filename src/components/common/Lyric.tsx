@@ -1,6 +1,6 @@
 import { twMerge } from "tailwind-merge";
-import { DolColor, LyricLine, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
-import { getTwDolColor } from "@erikmuir/dol-lib/dapp";
+import { DolColor, LyricLine } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 
 export type LyricProps = {
   lines?: LyricLine[];

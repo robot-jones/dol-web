@@ -1,7 +1,7 @@
 import { twMerge } from "tailwind-merge";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
-import { getTwDolColor, getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
-import { TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { BaseAttributeProps } from "./types";
 
 export type AudioAttributeProps = BaseAttributeProps & {

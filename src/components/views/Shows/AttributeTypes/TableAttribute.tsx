@@ -1,7 +1,7 @@
 import { twMerge } from "tailwind-merge";
-import { getTwDolColor, getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
+import { getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
-import { TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { BaseAttributeProps } from "./types";
 
 export type TableAttributeProps = BaseAttributeProps & {

@@ -1,10 +1,7 @@
 import { twMerge } from "tailwind-merge";
-import {
-  getTwDolColor,
-  getLabelTextColorClass,
-} from "@erikmuir/dol-lib/dapp";
-import { TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
 import { boldIndicator, sanitizeText } from "@erikmuir/dol-lib/utils";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { BaseAttributeProps } from "./types";
 

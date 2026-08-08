@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { BiSolidError } from "react-icons/bi";
 import { FaPlusCircle } from "react-icons/fa";
 import { twMerge } from "tailwind-merge";
-import { getEraColor, getTwDolColor, extractPerformanceAttributes } from "@erikmuir/dol-lib/dapp";
-import { PerformanceAttributes, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getEraColor, extractPerformanceAttributes } from "@erikmuir/dol-lib/dapp";
+import { PerformanceAttributes } from "@erikmuir/dol-lib/types";
 import { ipfsToHttps, toFriendlyDate } from "@erikmuir/dol-lib/utils";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { useNftMetadata } from "@/hooks";
 import { Loading } from "@/components/common/Loading";
 

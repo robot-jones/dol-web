@@ -1,5 +1,5 @@
-import { getTwDolColor } from "@erikmuir/dol-lib/dapp";
-import { DolColor, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { DolColor } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { twMerge } from "tailwind-merge";
 
 interface PageNoteProps {

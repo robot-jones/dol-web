@@ -1,7 +1,8 @@
 import Image from "next/image";
 import { twMerge } from "tailwind-merge";
-import { getTwDolColor, getDolColorFromHexValue } from "@erikmuir/dol-lib/dapp";
-import { type PerformanceImageAttributes, TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getDolColorFromHexValue } from "@erikmuir/dol-lib/dapp";
+import { type PerformanceImageAttributes } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { Donut } from "@/components/common/Shapes";
 
 export const NFTPlaceholder = ({

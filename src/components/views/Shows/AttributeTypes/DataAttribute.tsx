@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { twMerge } from "tailwind-merge";
-import { getTwDolColor, getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
+import { getLabelTextColorClass } from "@erikmuir/dol-lib/dapp";
 import { sanitizeText } from "@erikmuir/dol-lib/utils";
-import { TwColorClassPrefix } from "@erikmuir/dol-lib/types";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { BaseAttributeProps } from "./types";
 
