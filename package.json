@@ -47,13 +47,13 @@
     "whatwg-fetch": "^3.6.20"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.721.0",
+    "@aws-sdk/client-dynamodb": "3.922.0",
     "@aws-sdk/credential-providers": "^3.726.1",
-    "@aws-sdk/lib-dynamodb": "^3.721.0",
+    "@aws-sdk/lib-dynamodb": "3.922.0",
     "@erikmuir/dol-lib": "3.0.1",
     "@hashgraph/hedera-wallet-connect": "^1.5.1",
     "@hashgraph/proto": "^2.17.0-beta.1",
-    "@hashgraph/sdk": "^2.61.0",
+    "@hashgraph/sdk": "2.76.0",
     "@walletconnect/modal": "^2.7.0",
     "@walletconnect/modal-core": "^2.7.0",
     "@walletconnect/qrcode-modal": "^1.8.0",
