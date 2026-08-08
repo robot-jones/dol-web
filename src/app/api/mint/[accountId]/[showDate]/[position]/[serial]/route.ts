@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitNftMetadataUpdate } from "@erikmuir/dol-lib/server/dapp";
 import { getPerformance, setSerial } from "@erikmuir/dol-lib/server/dynamo";
-import { EnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
+import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { isWhiteList } from "@/env";
 
@@ -25,8 +25,8 @@ export async function POST(
   { params }: { params: Promise<PostTransferParams> }
 ): Promise<NextResponse<StandardPayload<boolean | string>>> {
   const { accountId, showDate, position, serial } = await params;
-  const mintEnabled = getBoolean(EnvKeys.NEXT_PUBLIC_MINT_ENABLED);
-  const hfbCollectionId = getRequired(EnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
+  const mintEnabled = getBoolean(PublicEnvKeys.NEXT_PUBLIC_MINT_ENABLED);
+  const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
   if (!mintEnabled && !isWhiteList(accountId)) {
     return badRequest("Minting is disabled");

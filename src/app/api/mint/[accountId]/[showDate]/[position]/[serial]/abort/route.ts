@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EnvKeys, getRequired } from "@erikmuir/dol-lib/env";
+import { PublicEnvKeys, getRequired } from "@erikmuir/dol-lib/env";
 import { unlockPerformance, releaseSerial } from "@erikmuir/dol-lib/server/dynamo";
 import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
 import { StandardPayload, success } from "@/utils";
@@ -27,7 +27,7 @@ export async function POST(
 ): Promise<NextResponse<StandardPayload<void | string>>> {
   try {
     const { accountId, showDate, position, serial } = await params;
-    const hfbCollectionId = getRequired(EnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
+    const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
     const parsedPosition = parseInt(position, 10);
     const parsedSerial = parseInt(serial, 10);
     const performanceId = getPerformanceId(showDate, parsedPosition);

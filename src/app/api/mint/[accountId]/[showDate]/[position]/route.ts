@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Hbar, TransferTransaction } from "@hashgraph/sdk";
-import { EnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
+import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { claimPerformance, publishNftMetadata } from "@erikmuir/dol-lib/server/dapp";
@@ -35,10 +35,10 @@ export async function POST(
   const { showDate, position, accountId } = await params;
   const parsedPosition = parseInt(position);
 
-  const mintEnabled = getBoolean(EnvKeys.NEXT_PUBLIC_MINT_ENABLED);
-  const hfbHbarPrice = getRequired(EnvKeys.NEXT_PUBLIC_HFB_HBAR_PRICE);
-  const treasuryAccount = getRequired(EnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
-  const hfbCollectionId = getRequired(EnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
+  const mintEnabled = getBoolean(PublicEnvKeys.NEXT_PUBLIC_MINT_ENABLED);
+  const hfbHbarPrice = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_HBAR_PRICE);
+  const treasuryAccount = getRequired(PublicEnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
+  const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
   if (!mintEnabled && !isWhiteList(accountId)) {
     return badRequest("Minting is disabled");
