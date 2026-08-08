@@ -1,8 +1,8 @@
 import { render } from "@testing-library/react";
 import { Loading } from "./Loading";
 
-jest.mock("@erikmuir/dol-lib/dapp", () => {
-  const actual = jest.requireActual("@erikmuir/dol-lib/dapp");
+vi.mock("@erikmuir/dol-lib/dapp", async () => {
+  const actual = await vi.importActual("@erikmuir/dol-lib/dapp");
   return {
     ...actual,
     getLyricByCategory: () => [

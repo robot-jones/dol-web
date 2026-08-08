@@ -3,14 +3,14 @@ import { SearchBar } from "./SearchBar";
 
 describe("SearchBar", () => {
   it("renders and focuses input on mount", () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     render(<SearchBar value="" onChange={onChange} placeholder="Find" />);
     const input = screen.getByRole("textbox", { name: "Find" });
     expect(input).toHaveFocus();
   });
 
   it("calls onChange when typing", () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     render(<SearchBar value="" onChange={onChange} placeholder="Search" />);
     const input = screen.getByRole("textbox", { name: "Search" });
     fireEvent.change(input, { target: { value: "hello" } });
@@ -18,7 +18,7 @@ describe("SearchBar", () => {
   });
 
   it("clicking container focuses the input", () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     render(<SearchBar value="" onChange={onChange} placeholder="Search" />);
     const container = screen.getByRole("search");
     container.click();

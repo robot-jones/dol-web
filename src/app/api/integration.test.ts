@@ -9,15 +9,16 @@ import * as SongRoute from "./songs/[songId]/route";
 
 import * as Dynamo from "@erikmuir/dol-lib/server/dynamo";
 import * as Api from "@erikmuir/dol-lib/server/api";
+import type { Mock } from "vitest";
 
-jest.mock("@erikmuir/dol-lib/server/dynamo", () => ({
-  queryResources: jest.fn(),
-  getResource: jest.fn(),
+vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
+  queryResources: vi.fn(),
+  getResource: vi.fn(),
 }));
 
-jest.mock("@erikmuir/dol-lib/server/api", () => ({
-  getSetlistsByShowDate: jest.fn(),
-  getSetlistsBySong: jest.fn(),
+vi.mock("@erikmuir/dol-lib/server/api", () => ({
+  getSetlistsByShowDate: vi.fn(),
+  getSetlistsBySong: vi.fn(),
 }));
 
 const app = createApp([
@@ -32,7 +33,7 @@ describe("API Integration", () => {
 
   describe("/api/shows GET", () => {
     it("returns filtered list", async () => {
-      (Dynamo.queryResources as jest.Mock).mockResolvedValueOnce([
+      (Dynamo.queryResources as Mock).mockResolvedValueOnce([
         { artistId: 1 },
         { artistId: 2 },
       ]);
@@ -45,14 +46,14 @@ describe("API Integration", () => {
 
   describe("api/setlists/:dateOrSlug GET", () => {
     it("uses song slug branch", async () => {
-      (Api.getSetlistsBySong as jest.Mock).mockResolvedValueOnce([{ artistId: 1 }, { artistId: 3 }]);
+      (Api.getSetlistsBySong as Mock).mockResolvedValueOnce([{ artistId: 1 }, { artistId: 3 }]);
       const res = await request(app).get("/api/setlists/harpua");
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual([{ artistId: 1 }]);
     });
 
     it("uses date branch", async () => {
-      (Api.getSetlistsByShowDate as jest.Mock).mockResolvedValueOnce([{ artistId: 1 }, { artistId: 2 }]);
+      (Api.getSetlistsByShowDate as Mock).mockResolvedValueOnce([{ artistId: 1 }, { artistId: 2 }]);
       const res = await request(app).get("/api/setlists/1998-07-29");
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual([{ artistId: 1 }]);
@@ -67,7 +68,7 @@ describe("API Integration", () => {
 
   describe("/api/setlists/:dateOrSlug/:position GET", () => {
     it("returns specific setlist", async () => {
-      (Api.getSetlistsByShowDate as jest.Mock).mockResolvedValueOnce([
+      (Api.getSetlistsByShowDate as Mock).mockResolvedValueOnce([
         { showDate: "1994-07-08", position: 1, artistId: 1 },
         { showDate: "1994-07-08", position: 2, artistId: 1 },
       ]);
@@ -85,7 +86,7 @@ describe("API Integration", () => {
 
   describe("/api/songs/:songId GET", () => {
     it("fetches song", async () => {
-      (Dynamo.getResource as jest.Mock).mockResolvedValueOnce({ id: "123", title: "Song" });
+      (Dynamo.getResource as Mock).mockResolvedValueOnce({ id: "123", title: "Song" });
       const res = await request(app).get("/api/songs/123");
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual({ id: "123", title: "Song" });
