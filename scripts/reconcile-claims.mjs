@@ -19,6 +19,7 @@
 //     performance can be minted again. Only acts on a claim that's
 //     actually stuck - refuses if the performance was already sold.
 
+import "dotenv/config";
 import {
   queryUnfinalizedClaims,
   unlockPerformance,
