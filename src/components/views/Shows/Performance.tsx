@@ -260,26 +260,28 @@ export const Performance = (): React.ReactNode => {
     );
 
     if (!txBytes) {
-      let error = "Unknown error";
+      // No client-side audit write here: whichever of these failed
+      // (claim, or a claim that got released again after a metadata
+      // publish failure) already has its own server-side audit entry -
+      // PERFORMANCE_CLAIM/SERIAL_CLAIM/NFT_METADATA_PUBLISH, all
+      // success: false, keyed to this account. By the time we'd report
+      // an NFT_PURCHASE failure here, there's no live claim left to
+      // verify it against anyway (see PUNCHLIST.md Finding 14) - it
+      // would just be rejected.
       switch (serial) {
         case SerialErrorResponse.LOCK_NOT_ACQUIRED:
-          error = "Failed to claim performance";
           updateStatus(MintStatusDisplayText.LockNotAcquired);
           break;
         case SerialErrorResponse.ALREADY_MINTED:
-          error = "Performance already claimed";
           updateStatus(MintStatusDisplayText.AlreadyMinted);
           break;
         case SerialErrorResponse.NO_SUPPLY:
-          error = "No supply available";
           updateStatus(MintStatusDisplayText.NoSupply);
           break;
         case SerialErrorResponse.METADATA_PUBLISH_FAILED:
-          error = "Failed to publish NFT metadata";
           updateStatus(MintStatusDisplayText.MetadataPublishFailed);
           break;
         default:
-          error = "Unknown error";
           updateStatus(MintStatusDisplayText.LockNotAcquired);
           break;
       }
@@ -287,21 +289,6 @@ export const Performance = (): React.ReactNode => {
         `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
         { method: "POST" }
       );
-      await fetchStandardJson(`/api/audit/${accountId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "NFT_PURCHASE",
-          success: false,
-          context: {
-            tokenId: hfbCollectionId,
-            serial,
-            showDate: date,
-            position,
-            error,
-          },
-        }),
-      });
       return;
     }
 

@@ -73,7 +73,7 @@ export async function POST(
 
   if (!metadataCid) {
     await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, serial, performanceId);
+    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 
@@ -81,7 +81,7 @@ export async function POST(
   if (!setMetadataCidResult.success) {
     console.error(`Failed to set metadataCid: ${setMetadataCidResult.reason}`);
     await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, serial, performanceId);
+    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 

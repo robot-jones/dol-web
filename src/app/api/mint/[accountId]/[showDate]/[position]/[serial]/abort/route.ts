@@ -32,7 +32,7 @@ export async function POST(
     const parsedSerial = parseInt(serial, 10);
     const performanceId = getPerformanceId(showDate, parsedPosition);
     await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, parsedSerial, performanceId);
+    await releaseSerial(hfbCollectionId, parsedSerial, performanceId, accountId);
   } catch (e) {
     console.error(e);
   }
