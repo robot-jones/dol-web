@@ -73,6 +73,7 @@ export const Performance = (): React.ReactNode => {
   const [status, setStatus] = useState<MintStatusDisplayText>(MintStatusDisplayText.None);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
+  const [now, setNow] = useState<number>(Date.now());
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -91,6 +92,15 @@ export const Performance = (): React.ReactNode => {
       setSongId(setlist.songId);
     }
   }, [setlist]);
+
+  // Ticks `now` while this performance is locked, so the elapsed-time note
+  // on the disabled mint button stays live without needing a network
+  // refetch - lockedAt is a fixed timestamp, only "now" needs to move.
+  useEffect(() => {
+    if (!performance?.lockedBy) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [performance?.lockedBy]);
 
   // Update performance attributes when sources change
   useEffect(() => {
@@ -378,7 +388,21 @@ export const Performance = (): React.ReactNode => {
     }
     if (performance?.lockedBy) {
       return (
-        <DolButton color="gray" roundedFull disabled>Locked</DolButton>
+        <div className="flex flex-col items-center gap-1">
+          <DolButton color="gray" roundedFull disabled>Locked</DolButton>
+          {performance.lockedAt && (
+            <div className="text-xs text-gray-medium">
+              {/* Elapsed time, not a precise countdown - the sweep that
+                  releases stuck claims runs on its own schedule (currently
+                  every 5m, releasing anything over 15m old), so an exact
+                  "frees up in Xm" promise would drift out of sync and could
+                  visibly overshoot. Keep this note's "~15m" in sync with
+                  dol-bot's reconcile-claims.js EXPIRY_MINUTES if that ever
+                  changes - see PUNCHLIST.md Finding 18. */}
+              Locked for {msToTime(now - performance.lockedAt)} · auto-releases within ~15m if abandoned
+            </div>
+          )}
+        </div>
       );
     }
     if (!mintEnabled && !whiteList) {
