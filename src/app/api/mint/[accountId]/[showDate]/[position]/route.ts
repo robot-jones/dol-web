@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Hbar, TransferTransaction } from "@hashgraph/sdk";
 import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
-import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/types";
+import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { claimPerformance, publishNftMetadata } from "@erikmuir/dol-lib/server/dapp";
 import { setMetadataCid, unlockPerformance, releaseSerial } from "@erikmuir/dol-lib/server/dynamo";
@@ -32,7 +32,7 @@ export type PreTransferParams = {
 
 export type ServerPreTransferResponse = {
   serial: number | SerialErrorResponse;
-  txBytes?: Uint8Array<ArrayBufferLike>;
+  txBytes?: Uint8ArrayWrapper;
 };
 
 export async function POST(
@@ -100,7 +100,17 @@ export async function POST(
     .addNftTransfer(hfbCollectionId, serial, treasuryAccount, accountId)
     .freezeWith(client);
   const signedTx = await transaction.signWithOperator(client);
-  const txBytes = signedTx.toBytes();
+  // Serialized explicitly as { type: "Buffer", data: [...] } (matching
+  // dol-lib's Uint8ArrayWrapper) rather than sent as a raw Uint8Array -
+  // JSON.stringify on a bare Uint8Array produces {"0":n,"1":n,...}, not an
+  // array, which the client's `new Uint8Array(txBytes.data)` can't
+  // reconstruct (txBytes.data is undefined -> an empty transaction, which
+  // the SDK then fails to deserialize client-side). See PUNCHLIST.md
+  // Finding 17.
+  const txBytes: Uint8ArrayWrapper = {
+    type: "Buffer",
+    data: Array.from(signedTx.toBytes()),
+  };
 
   return success({ serial, txBytes });
 }
