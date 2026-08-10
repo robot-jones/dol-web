@@ -16,6 +16,13 @@ import { isWhiteList } from "@/env";
 // 2. If metadata publishing fails, the claim is released immediately so
 // the performance doesn't sit stuck for a failure that happened before the
 // buyer ever saw a wallet prompt.
+//
+// Vercel's default function timeout (10s) isn't enough for this route on a
+// cold start: extracting @sparticuz/chromium's binary, launching it,
+// rendering, and two sequential Pinata uploads routinely exceeds that on
+// its own - see PUNCHLIST.md Finding 16's follow-up. 60s is Vercel's cap on
+// the Hobby tier; comfortably covers a cold run without over-provisioning.
+export const maxDuration = 60;
 
 export type PreTransferParams = {
   accountId: string;
