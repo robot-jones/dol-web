@@ -8,10 +8,12 @@ vi.mock("@erikmuir/dol-lib/server/dapp", () => ({
 const setMetadataCidMock = vi.fn();
 const unlockPerformanceMock = vi.fn();
 const releaseSerialMock = vi.fn();
+const getPerformanceMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setMetadataCid: (...a: unknown[]) => setMetadataCidMock(...a),
   unlockPerformance: (...a: unknown[]) => unlockPerformanceMock(...a),
   releaseSerial: (...a: unknown[]) => releaseSerialMock(...a),
+  getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
 }));
 
 vi.mock("@erikmuir/dol-lib/server/blockchain", () => ({
@@ -67,6 +69,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     claimPerformanceMock.mockResolvedValue(7);
     publishNftMetadataMock.mockResolvedValue("bafy-cid");
     setMetadataCidMock.mockResolvedValue({ success: true });
+    getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
   });
 
   it("returns txBytes as an explicit Buffer-shaped wrapper the client can reconstruct from", async () => {
@@ -80,5 +83,12 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     // `new Uint8Array(body.data.txBytes.data)` must round-trip exactly.
     expect(body.data.txBytes).toEqual({ type: "Buffer", data: Array.from(rawBytes) });
     expect(new Uint8Array(body.data.txBytes.data)).toEqual(rawBytes);
+  });
+
+  it("includes lockedAt so the client can show the elapsed-lock timer immediately, not just after a reload", async () => {
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+    expect(body.data.lockedAt).toBe(1786300000000);
+    expect(getPerformanceMock).toHaveBeenCalledWith("1998-07-29", 1);
   });
 });

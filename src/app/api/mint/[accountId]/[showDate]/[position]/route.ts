@@ -4,7 +4,7 @@ import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { claimPerformance, publishNftMetadata } from "@erikmuir/dol-lib/server/dapp";
-import { setMetadataCid, unlockPerformance, releaseSerial } from "@erikmuir/dol-lib/server/dynamo";
+import { setMetadataCid, unlockPerformance, releaseSerial, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { isWhiteList } from "@/env";
@@ -33,6 +33,7 @@ export type PreTransferParams = {
 export type ServerPreTransferResponse = {
   serial: number | SerialErrorResponse;
   txBytes?: Uint8ArrayWrapper;
+  lockedAt?: number;
 };
 
 export async function POST(
@@ -112,5 +113,10 @@ export async function POST(
     data: Array.from(signedTx.toBytes()),
   };
 
-  return success({ serial, txBytes });
+  // So the client can show "Locked for mm:ss" immediately once claimed,
+  // without waiting on a page reload to pick up the server-side value -
+  // see PUNCHLIST.md's two-click flow item, the immediate-timer follow-up.
+  const claimedPerformance = await getPerformance(showDate, parsedPosition);
+
+  return success({ serial, txBytes, lockedAt: claimedPerformance?.lockedAt });
 }

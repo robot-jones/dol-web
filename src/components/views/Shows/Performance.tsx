@@ -58,10 +58,14 @@ import { PageNote } from "@/components/common/PageNote";
 import { DolButton } from "@/components/common/DolButton";
 
 // Narrower than PreTransferResponse (whose txBytes is optional) - by the
-// time we ever set preparedTx, both fields are always populated together.
+// time we ever set preparedTx, serial/txBytes are always populated
+// together. lockedAt carries over too, so the elapsed-lock note can show
+// immediately (see PUNCHLIST.md's immediate-timer follow-up) instead of
+// only appearing after a reload re-fetches performance.lockedAt from SWR.
 type PreparedTransfer = {
   serial: number;
   txBytes: Uint8ArrayWrapper;
+  lockedAt?: number;
 };
 
 export const Performance = (): React.ReactNode => {
@@ -106,14 +110,15 @@ export const Performance = (): React.ReactNode => {
     }
   }, [setlist]);
 
-  // Ticks `now` while this performance is locked, so the elapsed-time note
-  // on the disabled mint button stays live without needing a network
-  // refetch - lockedAt is a fixed timestamp, only "now" needs to move.
+  // Ticks `now` while this performance is locked (by anyone, including a
+  // claim just made in this tab via preparedTx), so the elapsed-time note
+  // stays live without needing a network refetch - lockedAt is a fixed
+  // timestamp, only "now" needs to move.
   useEffect(() => {
-    if (!performance?.lockedBy) return;
+    if (!performance?.lockedBy && !preparedTx) return;
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [performance?.lockedBy]);
+  }, [performance?.lockedBy, preparedTx]);
 
   // Update performance attributes when sources change
   useEffect(() => {
@@ -282,7 +287,7 @@ export const Performance = (): React.ReactNode => {
     }
 
     updateStatus(MintStatusDisplayText.Claiming);
-    const { serial, txBytes } = await fetchStandardJson<PreTransferResponse>(
+    const { serial, txBytes, lockedAt } = await fetchStandardJson<PreTransferResponse>(
       `/api/mint/${accountId}/${date}/${position}`,
       {
         method: "POST",
@@ -324,7 +329,7 @@ export const Performance = (): React.ReactNode => {
       return;
     }
 
-    setPreparedTx({ serial, txBytes });
+    setPreparedTx({ serial, txBytes, lockedAt });
     updateStatus(MintStatusDisplayText.ReadyToSign);
   };
 
@@ -410,6 +415,25 @@ export const Performance = (): React.ReactNode => {
     );
   };
 
+  // Elapsed time, not a precise countdown - the sweep that releases stuck
+  // claims runs on its own schedule (currently every 5m, releasing
+  // anything over 15m old), so an exact "frees up in Xm" promise would
+  // drift out of sync and could visibly overshoot. Keep this note's "~15m"
+  // in sync with dol-bot's reconcile-claims.js EXPIRY_MINUTES if that ever
+  // changes - see PUNCHLIST.md Finding 18. Shared between the "just
+  // claimed it myself" (preparedTx) and "someone/something else has it
+  // locked" (performance.lockedBy) states, so it shows immediately after a
+  // successful claim rather than only after a reload re-fetches
+  // performance.lockedAt - see PUNCHLIST.md's immediate-timer follow-up.
+  const getLockedForNote = (lockedAt?: number): React.ReactNode => {
+    if (!lockedAt) return null;
+    return (
+      <div className="text-xs text-gray-medium">
+        Locked for {msToTime(now - lockedAt)} · auto-releases within ~15m if abandoned
+      </div>
+    );
+  };
+
   const getMintButton = (): React.ReactNode => {
     if (performanceLoading || isAssociatedLoading) {
       return <DolButton color="gray" roundedFull disabled>Please Wait...</DolButton>;
@@ -433,6 +457,7 @@ export const Performance = (): React.ReactNode => {
           <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick}>
             Cancel
           </DolButton>
+          {getLockedForNote(preparedTx.lockedAt)}
         </div>
       );
     }
@@ -445,18 +470,7 @@ export const Performance = (): React.ReactNode => {
       return (
         <div className="flex flex-col items-center gap-1">
           <DolButton color="gray" roundedFull disabled>Locked</DolButton>
-          {performance.lockedAt && (
-            <div className="text-xs text-gray-medium">
-              {/* Elapsed time, not a precise countdown - the sweep that
-                  releases stuck claims runs on its own schedule (currently
-                  every 5m, releasing anything over 15m old), so an exact
-                  "frees up in Xm" promise would drift out of sync and could
-                  visibly overshoot. Keep this note's "~15m" in sync with
-                  dol-bot's reconcile-claims.js EXPIRY_MINUTES if that ever
-                  changes - see PUNCHLIST.md Finding 18. */}
-              Locked for {msToTime(now - performance.lockedAt)} · auto-releases within ~15m if abandoned
-            </div>
-          )}
+          {getLockedForNote(performance.lockedAt)}
         </div>
       );
     }
@@ -543,8 +557,6 @@ export const Performance = (): React.ReactNode => {
     .map((s: SetlistLine) => (s.isCurrentPosition ? `${boldIndicator}${s.text}` : s.text))
     .join("\n");
 
-  const showAuditLogs = false;
-
   return (
     <div className="w-[320px] md:w-[500px] lg:w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
@@ -620,17 +632,13 @@ export const Performance = (): React.ReactNode => {
         songLoading={songLoading}
       />
 
-      {showAuditLogs && (
-        <SectionHeader
-          text="Audit Logs"
-          borderClass="border-gray-medium"
-          backgroundClass="bg-dol-dark"
-        />
-      )}
+      <SectionHeader
+        text="Audit Logs"
+        borderClass="border-gray-medium"
+        backgroundClass="bg-dol-dark"
+      />
 
-      {showAuditLogs && (
-        <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
-      )}
+      <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
     </div>
   );
 };
