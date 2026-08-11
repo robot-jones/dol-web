@@ -84,7 +84,7 @@ export const Performance = (): React.ReactNode => {
   const [now, setNow] = useState<number>(Date.now());
   // Set once handleClaimClick's server round-trip finishes and cleared once
   // handleSignClick/handleCancelClick resolves - the "am I mid-flow" signal
-  // getMintButton uses to show "Sign in Wallet" instead of the generic
+  // getMintButton uses to show "Confirm in Wallet" instead of the generic
   // "Locked" state.
   const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
 
@@ -428,7 +428,7 @@ export const Performance = (): React.ReactNode => {
       return (
         <div className="flex flex-col items-center gap-2">
           <DolButton color="blue" roundedFull onClick={handleSignClick}>
-            Sign in Wallet
+            Confirm in Wallet
           </DolButton>
           <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick}>
             Cancel
@@ -491,7 +491,7 @@ export const Performance = (): React.ReactNode => {
     return !performanceLoading &&
       status !== MintStatusDisplayText.None &&
       status !== MintStatusDisplayText.AlreadyMinted &&
-      // Redundant with the "Sign in Wallet" button label itself.
+      // Redundant with the "Confirm in Wallet" button label itself.
       status !== MintStatusDisplayText.ReadyToSign ? (
       <div className="text-dol-yellow">{status}</div>
     ) : null;
