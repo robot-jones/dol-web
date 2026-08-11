@@ -11,6 +11,7 @@ import {
   SerialErrorResponse,
   SetlistLine,
   Subject,
+  Uint8ArrayWrapper,
 } from "@erikmuir/dol-lib/types";
 import {
   ipfsToHttps,
@@ -56,6 +57,13 @@ import { NFTPlaceholder } from "./NFTPlaceholder";
 import { PageNote } from "@/components/common/PageNote";
 import { DolButton } from "@/components/common/DolButton";
 
+// Narrower than PreTransferResponse (whose txBytes is optional) - by the
+// time we ever set preparedTx, both fields are always populated together.
+type PreparedTransfer = {
+  serial: number;
+  txBytes: Uint8ArrayWrapper;
+};
+
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
   const pathParts = pathname.split("/");
@@ -74,6 +82,11 @@ export const Performance = (): React.ReactNode => {
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
+  // Set once handleClaimClick's server round-trip finishes and cleared once
+  // handleSignClick/handleCancelClick resolves - the "am I mid-flow" signal
+  // getMintButton uses to show "Sign in Wallet" instead of the generic
+  // "Locked" state.
+  const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -250,7 +263,16 @@ export const Performance = (): React.ReactNode => {
     console.log(newStatus);
   };
 
-  const handleMintClick = async () => {
+  // Split into two clicks - claim/prepare, then a separate sign-in-wallet
+  // click - rather than one continuous flow. Browsers only allow a wallet
+  // popup to open/focus without being blocked if it happens synchronously
+  // within a real user gesture; the claim+render+upload round-trip between
+  // the original click and the wallet call broke that chain, so HashPack's
+  // window had to be switched to manually instead of coming to the front on
+  // its own. handleSignClick fires from its own fresh click, so the gesture
+  // chain is intact when it reaches the wallet. See PUNCHLIST.md's two-click
+  // flow item.
+  const handleClaimClick = async () => {
     if (!pageLoaded || !setlist) {
       return;
     }
@@ -302,6 +324,14 @@ export const Performance = (): React.ReactNode => {
       return;
     }
 
+    setPreparedTx({ serial, txBytes });
+    updateStatus(MintStatusDisplayText.ReadyToSign);
+  };
+
+  const handleSignClick = async () => {
+    if (!preparedTx) return;
+    const { serial, txBytes } = preparedTx;
+
     updateStatus(MintStatusDisplayText.InitiatingTransfer);
     let transferSuccess = false;
     try {
@@ -319,6 +349,7 @@ export const Performance = (): React.ReactNode => {
 
     if (!transferSuccess) {
       updateStatus(MintStatusDisplayText.TransferAborted);
+      setPreparedTx(null);
       await fetchStandardJson(
         `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
         { method: "POST" }
@@ -332,10 +363,22 @@ export const Performance = (): React.ReactNode => {
       { method: "POST" }
     );
 
+    setPreparedTx(null);
     updateStatus(
       metadataUpdateSuccess
         ? MintStatusDisplayText.MintComplete
         : MintStatusDisplayText.FailedToUpdateMetadata
+    );
+  };
+
+  const handleCancelClick = async () => {
+    if (!preparedTx) return;
+    const { serial } = preparedTx;
+    setPreparedTx(null);
+    updateStatus(MintStatusDisplayText.None);
+    await fetchStandardJson(
+      `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
+      { method: "POST" }
     );
   };
 
@@ -381,6 +424,18 @@ export const Performance = (): React.ReactNode => {
         <DolButton color="blue" roundedFull onClick={handleAssociateClick}>Associate the token</DolButton>
       );
     }
+    if (preparedTx) {
+      return (
+        <div className="flex flex-col items-center gap-2">
+          <DolButton color="blue" roundedFull onClick={handleSignClick}>
+            Sign in Wallet
+          </DolButton>
+          <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick}>
+            Cancel
+          </DolButton>
+        </div>
+      );
+    }
     if (performance?.serial) {
       return (
         <DolButton color="gray" roundedFull disabled>Already Minted</DolButton>
@@ -424,7 +479,7 @@ export const Performance = (): React.ReactNode => {
       <DolButton
         color="blue"
         roundedFull
-        onClick={handleMintClick}
+        onClick={handleClaimClick}
         disabled={disabled}
       >
         Mint: {`${process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46"}`} ℏ
@@ -435,7 +490,9 @@ export const Performance = (): React.ReactNode => {
   const getStatusText = (): React.ReactNode => {
     return !performanceLoading &&
       status !== MintStatusDisplayText.None &&
-      status !== MintStatusDisplayText.AlreadyMinted ? (
+      status !== MintStatusDisplayText.AlreadyMinted &&
+      // Redundant with the "Sign in Wallet" button label itself.
+      status !== MintStatusDisplayText.ReadyToSign ? (
       <div className="text-dol-yellow">{status}</div>
     ) : null;
   };
