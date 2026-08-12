@@ -13,7 +13,8 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev:testnet": "cp .env.testnet.local .env.local && next dev",
+    "dev:mainnet": "cp .env.mainnet.local .env.local && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
