@@ -3,7 +3,7 @@ import { Hbar, TransferTransaction } from "@hashgraph/sdk";
 import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
-import { claimPerformance, publishNftMetadata } from "@erikmuir/dol-lib/server/dapp";
+import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate } from "@erikmuir/dol-lib/server/dapp";
 import { setMetadataCid, unlockPerformance, releaseSerial, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
 import { badRequest, StandardPayload, success } from "@/utils";
@@ -11,11 +11,18 @@ import { isWhiteList } from "@/env";
 
 // /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
 //
-// Claims the performance, then does the slow/failure-prone work (render +
-// 2 IPFS uploads) before any money moves - see PUNCHLIST.md Finding 1/Phase
-// 2. If metadata publishing fails, the claim is released immediately so
-// the performance doesn't sit stuck for a failure that happened before the
-// buyer ever saw a wallet prompt.
+// Claims the performance, then does the slow/failure-prone work (render + 2
+// IPFS uploads + the on-chain metadata update) before any money moves - see
+// PUNCHLIST.md Finding 1/Phase 2. The on-chain update used to happen
+// post-transfer, but that left a gap: if it failed after the buyer's wallet
+// had already executed the transfer, Dynamo had no way to distinguish "never
+// signed" from "signed and transferred, but the metadata tx failed" - both
+// look like `lockedBy` set with no `serial`, so Finding 18's stuck-claim
+// sweep would release the performance for someone else to claim again even
+// though a real buyer already owned that serial. Doing the update here means
+// any failure in this whole chain - render, either IPFS upload, or the
+// on-chain update itself - is still a pre-payment failure: the claim is
+// released immediately and no money has moved yet.
 //
 // Vercel's default function timeout (10s) isn't enough for this route on a
 // cold start: extracting @sparticuz/chromium's binary, launching it,
@@ -88,6 +95,21 @@ export async function POST(
   const setMetadataCidResult = await setMetadataCid(showDate, parsedPosition, accountId, metadataCid);
   if (!setMetadataCidResult.success) {
     console.error(`Failed to set metadataCid: ${setMetadataCidResult.reason}`);
+    await unlockPerformance(showDate, parsedPosition, accountId);
+    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
+    return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
+  }
+
+  const metadataUpdateSuccess = await submitNftMetadataUpdate(
+    hfbCollectionId,
+    serial,
+    metadataCid,
+    showDate,
+    parsedPosition,
+    accountId
+  );
+  if (!metadataUpdateSuccess) {
+    console.error("Failed to submit on-chain metadata update.");
     await unlockPerformance(showDate, parsedPosition, accountId);
     await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });

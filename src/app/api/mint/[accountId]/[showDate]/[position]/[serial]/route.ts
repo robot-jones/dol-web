@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { submitNftMetadataUpdate } from "@erikmuir/dol-lib/server/dapp";
 import { getPerformance, setSerial } from "@erikmuir/dol-lib/server/dynamo";
-import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
+import { PublicEnvKeys, getBoolean } from "@erikmuir/dol-lib/env";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { isWhiteList } from "@/env";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial] (post-transfer endpoint)
 //
-// Everything slow/failure-prone (render, IPFS uploads) already happened
-// pre-transfer - see the sibling route. This is now just: verify the claim,
-// submit the on-chain metadata update with the pre-computed CID, and mark
-// the performance sold. Safe to retry: if `serial` is already set for this
-// exact claim, treat it as already-done rather than redo any work.
+// Everything slow/failure-prone (render, IPFS uploads, and the on-chain
+// metadata update itself) already happened pre-transfer - see the sibling
+// route. Deliberately moved the on-chain update there too, not just the
+// render/uploads: it's still a real Hedera transaction that can fail, and
+// leaving it post-transfer meant a failure here happened *after* the buyer's
+// wallet had already executed the transfer, with no way for Dynamo to tell
+// that apart from "never signed at all" - see PUNCHLIST.md for the finding.
+// This route is now just: verify the claim, and mark the performance sold.
+// Safe to retry: if `serial` is already set for this exact claim, treat it
+// as already-done rather than redo any work.
 
 export type PostTransferParams = {
   accountId: string;
@@ -26,7 +30,6 @@ export async function POST(
 ): Promise<NextResponse<StandardPayload<boolean | string>>> {
   const { accountId, showDate, position, serial } = await params;
   const mintEnabled = getBoolean(PublicEnvKeys.NEXT_PUBLIC_MINT_ENABLED);
-  const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
   if (!mintEnabled && !isWhiteList(accountId)) {
     return badRequest("Minting is disabled");
@@ -57,19 +60,6 @@ export async function POST(
       expectedSerial: parsedSerial,
       expectedAccountId: accountId,
     });
-    return success(false);
-  }
-
-  const metadataUpdateSuccess = await submitNftMetadataUpdate(
-    hfbCollectionId,
-    parsedSerial,
-    performance.metadataCid,
-    showDate,
-    parsedPosition,
-    accountId
-  );
-  if (!metadataUpdateSuccess) {
-    console.error("Failed to submit metadata update.");
     return success(false);
   }
 

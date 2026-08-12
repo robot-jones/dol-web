@@ -1,8 +1,10 @@
 const claimPerformanceMock = vi.fn();
 const publishNftMetadataMock = vi.fn();
+const submitNftMetadataUpdateMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dapp", () => ({
   claimPerformance: (...a: unknown[]) => claimPerformanceMock(...a),
   publishNftMetadata: (...a: unknown[]) => publishNftMetadataMock(...a),
+  submitNftMetadataUpdate: (...a: unknown[]) => submitNftMetadataUpdateMock(...a),
 }));
 
 const setMetadataCidMock = vi.fn();
@@ -53,6 +55,7 @@ process.env.NEXT_PUBLIC_HFB_HBAR_PRICE = "46";
 process.env.NEXT_PUBLIC_TREASURY_ACCOUNT = "0.0.treasury";
 process.env.NEXT_PUBLIC_HFB_COLLECTION_ID = "0.0.token";
 
+import { SerialErrorResponse } from "@erikmuir/dol-lib/types";
 import { POST } from "./route";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,6 +72,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     claimPerformanceMock.mockResolvedValue(7);
     publishNftMetadataMock.mockResolvedValue("bafy-cid");
     setMetadataCidMock.mockResolvedValue({ success: true });
+    submitNftMetadataUpdateMock.mockResolvedValue(true);
     getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
   });
 
@@ -90,5 +94,35 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     const body = await res.json();
     expect(body.data.lockedAt).toBe(1786300000000);
     expect(getPerformanceMock).toHaveBeenCalledWith("1998-07-29", 1);
+  });
+
+  it("submits the on-chain metadata update before building the transfer transaction, using the pre-computed CID", async () => {
+    await call("0.0.1", "1998-07-29", "1");
+    expect(submitNftMetadataUpdateMock).toHaveBeenCalledWith(
+      "0.0.token",
+      7,
+      "bafy-cid",
+      "1998-07-29",
+      1,
+      "0.0.1"
+    );
+  });
+
+  // See PUNCHLIST.md: this used to run post-transfer, where a failure here
+  // couldn't be told apart from "buyer never signed" once the wallet had
+  // already executed the transfer. Doing it pre-transfer means a failure
+  // here is still a pre-payment failure - release the claim, never build a
+  // transaction for the buyer to sign.
+  it("releases the claim and reports METADATA_PUBLISH_FAILED, without building a transaction, when the on-chain metadata update fails", async () => {
+    submitNftMetadataUpdateMock.mockResolvedValue(false);
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
+    expect(body.data.txBytes).toBeUndefined();
+    expect(unlockPerformanceMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1");
+    expect(releaseSerialMock).toHaveBeenCalledWith("0.0.token", 7, "19980729:1", "0.0.1");
+    expect(chainable.addHbarTransfer).not.toHaveBeenCalled();
   });
 });
