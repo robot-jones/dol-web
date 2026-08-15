@@ -13,11 +13,13 @@ const setPublishedCidsMock = vi.fn();
 const setImageCidMock = vi.fn();
 const getPerformanceMock = vi.fn();
 const getAccountMock = vi.fn();
+const getAppConfigMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
   setImageCid: (...a: unknown[]) => setImageCidMock(...a),
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
+  getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
 }));
 
 vi.mock("@erikmuir/dol-lib/server/blockchain", () => ({
@@ -52,7 +54,6 @@ vi.mock("@hashgraph/sdk", () => ({
   },
 }));
 
-process.env.NEXT_PUBLIC_MINT_ENABLED = "true";
 process.env.NEXT_PUBLIC_HFB_HBAR_PRICE = "46";
 process.env.NEXT_PUBLIC_TREASURY_ACCOUNT = "0.0.treasury";
 process.env.NEXT_PUBLIC_HFB_COLLECTION_ID = "0.0.token";
@@ -78,6 +79,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     submitNftMetadataUpdateMock.mockResolvedValue(true);
     getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
     getAccountMock.mockResolvedValue(undefined);
+    getAppConfigMock.mockResolvedValue({ mintEnabled: true });
   });
 
   it("returns txBytes as an explicit Buffer-shaped wrapper the client can reconstruct from", async () => {
@@ -191,9 +193,21 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
   });
 
   // See PUNCHLIST.md Finding 27: blocked is a hard stop regardless of
-  // NEXT_PUBLIC_MINT_ENABLED (which this test file sets to "true").
+  // mintEnabled (mocked true by default in beforeEach above).
   it("rejects a blocked account even though minting is globally enabled", async () => {
     getAccountMock.mockResolvedValue({ blocked: true });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.ok).toBe(false);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  // See PUNCHLIST.md Finding 28: mintEnabled now comes from dol-app-config
+  // (getAppConfig), read live - not the old build-time NEXT_PUBLIC_MINT_ENABLED.
+  it("rejects an unlisted account while the soft switch is paused", async () => {
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false });
 
     const res = await call("0.0.1", "1998-07-29", "1");
     const body = await res.json();

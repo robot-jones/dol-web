@@ -1,4 +1,4 @@
-import { getAccount } from "@erikmuir/dol-lib/server/dynamo";
+import { getAccount, getAppConfig } from "@erikmuir/dol-lib/server/dynamo";
 
 // Replaces the old NEXT_PUBLIC_WHITE_LIST/isWhiteList() env-var check with
 // real account state - see PUNCHLIST.md Finding 27. Two real wins over the
@@ -9,11 +9,19 @@ import { getAccount } from "@erikmuir/dol-lib/server/dynamo";
 // can't get back in just because the gate opens later. Otherwise same
 // shape as before: mint is allowed once it's open to everyone, or earlier
 // for an individually whitelisted account.
-export const canMint = async (
-  accountId: string,
-  mintEnabled: boolean
-): Promise<boolean> => {
-  const account = await getAccount(accountId);
+//
+// `mintEnabled` itself moved the same way in Finding 28 - it used to be
+// passed in by the caller, read out of the build-time-baked
+// NEXT_PUBLIC_MINT_ENABLED env var; now it's read live from dol-app-config
+// right here, alongside the account lookup, so both mint routes get the
+// soft kill switch for free just by calling this. Fetched in parallel with
+// the account lookup rather than sequentially - independent reads, no
+// reason to pay for round trips one after another.
+export const canMint = async (accountId: string): Promise<boolean> => {
+  const [account, appConfig] = await Promise.all([
+    getAccount(accountId),
+    getAppConfig(),
+  ]);
   if (account?.blocked) return false;
-  return mintEnabled || Boolean(account?.whitelisted);
+  return Boolean(appConfig?.mintEnabled) || Boolean(account?.whitelisted);
 };

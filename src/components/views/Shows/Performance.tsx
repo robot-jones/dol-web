@@ -39,9 +39,9 @@ import {
   SectionHeader,
   OtherAttributes,
 } from "@/components/views/Shows/Attributes";
-import { toBoolean } from "@erikmuir/dol-lib/env";
 import {
   useAccountStatus,
+  useAppConfigStatus,
   useIsTokenAssociated,
   useNftMetadata,
   usePerformance,
@@ -75,7 +75,6 @@ export const Performance = (): React.ReactNode => {
   const position = pathParts.at(-1) ?? "";
   const parsedPosition = parseInt(position, 10);
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
-  const mintEnabled = toBoolean(`${process.env.NEXT_PUBLIC_MINT_ENABLED}`);
 
   const [songId, setSongId] = useState<number>();
   const [bgColor, setBgColor] = useState<DolColorHex>(DolColorHex.Dark);
@@ -101,9 +100,15 @@ export const Performance = (): React.ReactNode => {
   const { accountId, walletInterface } = useWalletInterface();
   const { isAssociated, isAssociatedLoading, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
   const { accountStatus, accountStatusLoading } = useAccountStatus(accountId);
+  const { appConfigStatus } = useAppConfigStatus();
 
   const whitelisted = Boolean(accountStatus?.whitelisted);
   const blocked = Boolean(accountStatus?.blocked);
+  // See PUNCHLIST.md Finding 28 - live from dol-app-config (the soft kill
+  // switch) via SWR, not the old build-time NEXT_PUBLIC_MINT_ENABLED env
+  // var. Undefined while loading defaults to false, same fail-closed
+  // default the route side already uses.
+  const mintEnabled = Boolean(appConfigStatus?.mintEnabled);
 
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
