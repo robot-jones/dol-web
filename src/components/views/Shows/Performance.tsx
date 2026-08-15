@@ -324,7 +324,11 @@ export const Performance = (): React.ReactNode => {
       }
       await fetchStandardJson(
         `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "SYSTEM_FAILURE" }),
+        }
       );
       return;
     }
@@ -357,7 +361,11 @@ export const Performance = (): React.ReactNode => {
       setPreparedTx(null);
       await fetchStandardJson(
         `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "WALLET_REJECTED" }),
+        }
       );
       return;
     }
@@ -383,7 +391,11 @@ export const Performance = (): React.ReactNode => {
     updateStatus(MintStatusDisplayText.None);
     await fetchStandardJson(
       `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-      { method: "POST" }
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "USER_CANCELLED" }),
+      }
     );
   };
 

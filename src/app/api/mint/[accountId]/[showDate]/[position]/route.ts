@@ -3,9 +3,8 @@ import { Hbar, TransferTransaction } from "@hashgraph/sdk";
 import { PublicEnvKeys, getBoolean, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
-import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate } from "@erikmuir/dol-lib/server/dapp";
-import { setMetadataCid, unlockPerformance, releaseSerial, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
-import { getPerformanceId } from "@erikmuir/dol-lib/dapp";
+import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate, releaseClaim } from "@erikmuir/dol-lib/server/dapp";
+import { setPublishedCids, setImageCid, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { isWhiteList } from "@/env";
 
@@ -75,7 +74,7 @@ export async function POST(
     return success({ serial });
   }
 
-  const metadataCid = await publishNftMetadata(
+  const { imageCid, metadataCid } = await publishNftMetadata(
     hfbCollectionId,
     serial,
     showDate,
@@ -84,19 +83,27 @@ export async function POST(
     attributes
   );
 
-  const performanceId = getPerformanceId(showDate, parsedPosition);
-
-  if (!metadataCid) {
-    await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
+  if (!imageCid || !metadataCid) {
+    // publishNftMetadata never throws - it always returns whatever it
+    // actually managed to publish, even after an unexpected error (see
+    // PUNCHLIST.md Finding 25). If the image half made it up before
+    // metadata failed, persist that CID on its own so releaseClaim can
+    // still find and unpin it below - otherwise it'd be silently orphaned
+    // on Pinata forever.
+    if (imageCid) {
+      const setImageCidResult = await setImageCid(showDate, parsedPosition, accountId, imageCid);
+      if (!setImageCidResult.success) {
+        console.error(`Failed to set image CID: ${setImageCidResult.reason}`);
+      }
+    }
+    await releaseClaim(accountId, showDate, parsedPosition, "SYSTEM_FAILURE");
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 
-  const setMetadataCidResult = await setMetadataCid(showDate, parsedPosition, accountId, metadataCid);
-  if (!setMetadataCidResult.success) {
-    console.error(`Failed to set metadataCid: ${setMetadataCidResult.reason}`);
-    await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
+  const setPublishedCidsResult = await setPublishedCids(showDate, parsedPosition, accountId, imageCid, metadataCid);
+  if (!setPublishedCidsResult.success) {
+    console.error(`Failed to set published CIDs: ${setPublishedCidsResult.reason}`);
+    await releaseClaim(accountId, showDate, parsedPosition, "SYSTEM_FAILURE");
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 
@@ -110,8 +117,7 @@ export async function POST(
   );
   if (!metadataUpdateSuccess) {
     console.error("Failed to submit on-chain metadata update.");
-    await unlockPerformance(showDate, parsedPosition, accountId);
-    await releaseSerial(hfbCollectionId, serial, performanceId, accountId);
+    await releaseClaim(accountId, showDate, parsedPosition, "SYSTEM_FAILURE");
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
   }
 

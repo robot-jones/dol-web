@@ -1,20 +1,20 @@
 const claimPerformanceMock = vi.fn();
 const publishNftMetadataMock = vi.fn();
 const submitNftMetadataUpdateMock = vi.fn();
+const releaseClaimMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dapp", () => ({
   claimPerformance: (...a: unknown[]) => claimPerformanceMock(...a),
   publishNftMetadata: (...a: unknown[]) => publishNftMetadataMock(...a),
   submitNftMetadataUpdate: (...a: unknown[]) => submitNftMetadataUpdateMock(...a),
+  releaseClaim: (...a: unknown[]) => releaseClaimMock(...a),
 }));
 
-const setMetadataCidMock = vi.fn();
-const unlockPerformanceMock = vi.fn();
-const releaseSerialMock = vi.fn();
+const setPublishedCidsMock = vi.fn();
+const setImageCidMock = vi.fn();
 const getPerformanceMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
-  setMetadataCid: (...a: unknown[]) => setMetadataCidMock(...a),
-  unlockPerformance: (...a: unknown[]) => unlockPerformanceMock(...a),
-  releaseSerial: (...a: unknown[]) => releaseSerialMock(...a),
+  setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
+  setImageCid: (...a: unknown[]) => setImageCidMock(...a),
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
 }));
 
@@ -70,8 +70,9 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     claimPerformanceMock.mockResolvedValue(7);
-    publishNftMetadataMock.mockResolvedValue("bafy-cid");
-    setMetadataCidMock.mockResolvedValue({ success: true });
+    publishNftMetadataMock.mockResolvedValue({ imageCid: "bafy-img-cid", metadataCid: "bafy-cid" });
+    setPublishedCidsMock.mockResolvedValue({ success: true });
+    setImageCidMock.mockResolvedValue({ success: true });
     submitNftMetadataUpdateMock.mockResolvedValue(true);
     getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
   });
@@ -121,8 +122,68 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
 
     expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
     expect(body.data.txBytes).toBeUndefined();
-    expect(unlockPerformanceMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1");
-    expect(releaseSerialMock).toHaveBeenCalledWith("0.0.token", 7, "19980729:1", "0.0.1");
+    expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
     expect(chainable.addHbarTransfer).not.toHaveBeenCalled();
+  });
+
+  it("releases the claim via releaseClaim when publishNftMetadata gets nothing published at all", async () => {
+    publishNftMetadataMock.mockResolvedValue({});
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
+    expect(setImageCidMock).not.toHaveBeenCalled();
+    expect(setPublishedCidsMock).not.toHaveBeenCalled();
+    expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
+  });
+
+  // publishNftMetadata never throws, and always reports whatever it
+  // actually published - a lone imageCid (metadata upload failed right
+  // after) needs to be persisted on its own, not discarded, so releaseClaim
+  // can still find and unpin it. See PUNCHLIST.md Finding 25.
+  it("persists a lone imageCid via setImageCid, then releases the claim, when only the image half published", async () => {
+    publishNftMetadataMock.mockResolvedValue({ imageCid: "bafy-img-cid" });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
+    expect(setImageCidMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1", "bafy-img-cid");
+    expect(setPublishedCidsMock).not.toHaveBeenCalled();
+    expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
+  });
+
+  it("still releases the claim even if persisting the lone imageCid itself fails", async () => {
+    publishNftMetadataMock.mockResolvedValue({ imageCid: "bafy-img-cid" });
+    setImageCidMock.mockResolvedValue({ success: false, reason: "ConditionalCheckFailedException" });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
+    expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
+  });
+
+  it("releases the claim via releaseClaim when setPublishedCids fails", async () => {
+    setPublishedCidsMock.mockResolvedValue({ success: false, reason: "ConditionalCheckFailedException" });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
+    expect(submitNftMetadataUpdateMock).not.toHaveBeenCalled();
+    expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
+  });
+
+  it("passes both cids to setPublishedCids", async () => {
+    await call("0.0.1", "1998-07-29", "1");
+    expect(setPublishedCidsMock).toHaveBeenCalledWith(
+      "1998-07-29",
+      1,
+      "0.0.1",
+      "bafy-img-cid",
+      "bafy-cid"
+    );
   });
 });
