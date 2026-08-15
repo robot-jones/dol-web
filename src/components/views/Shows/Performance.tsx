@@ -40,8 +40,8 @@ import {
   OtherAttributes,
 } from "@/components/views/Shows/Attributes";
 import { toBoolean } from "@erikmuir/dol-lib/env";
-import { isWhiteList } from "@/env";
 import {
+  useAccountStatus,
   useIsTokenAssociated,
   useNftMetadata,
   usePerformance,
@@ -100,8 +100,10 @@ export const Performance = (): React.ReactNode => {
   const { metadata, metadataLoading } = useNftMetadata(hfbCollectionId, performance?.serial);
   const { accountId, walletInterface } = useWalletInterface();
   const { isAssociated, isAssociatedLoading, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
-  
-  const whiteList = isWhiteList(accountId);
+  const { accountStatus, accountStatusLoading } = useAccountStatus(accountId);
+
+  const whitelisted = Boolean(accountStatus?.whitelisted);
+  const blocked = Boolean(accountStatus?.blocked);
 
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
@@ -447,7 +449,7 @@ export const Performance = (): React.ReactNode => {
   };
 
   const getMintButton = (): React.ReactNode => {
-    if (performanceLoading || isAssociatedLoading) {
+    if (performanceLoading || isAssociatedLoading || accountStatusLoading) {
       return <DolButton color="gray" roundedFull disabled>Please Wait...</DolButton>;
     }
     if (!accountId) {
@@ -486,13 +488,23 @@ export const Performance = (): React.ReactNode => {
         </div>
       );
     }
-    if (!mintEnabled && !whiteList) {
+    if (blocked) {
+      // See PUNCHLIST.md Finding 27: what a blocked user is told beyond
+      // this is still an open UX question (no "request review" channel
+      // exists yet) - kept deliberately minimal for now rather than
+      // building that flow speculatively.
+      return (
+        <DolButton color="gray" roundedFull disabled>Minting Unavailable</DolButton>
+      );
+    }
+    if (!mintEnabled && !whitelisted) {
       return (
         <DolButton color="gray" roundedFull disabled>Public Mint: TBA</DolButton>
       );
     }
     const disabled =
-      (!mintEnabled && !whiteList) ||
+      blocked ||
+      (!mintEnabled && !whitelisted) ||
       !Boolean(performance) ||
       [
         MintStatusDisplayText.Claiming,
@@ -528,7 +540,15 @@ export const Performance = (): React.ReactNode => {
       return null;
     }
 
-    if (!mintEnabled && !whiteList) {
+    if (blocked) {
+      return (
+        <PageNote color="red" className="text-center">
+          Minting is currently unavailable for this account.
+        </PageNote>
+      );
+    }
+
+    if (!mintEnabled && !whitelisted) {
       return (
         <PageNote color="red" className="text-center">
           Public minting is currently disabled.
@@ -546,7 +566,7 @@ export const Performance = (): React.ReactNode => {
 
     return (
       <>
-        {!mintEnabled && whiteList && (
+        {!mintEnabled && whitelisted && (
           <PageNote color="green" className="text-center">
             Public minting is currently disabled, but you&apos;re on the Guest List!
           </PageNote>

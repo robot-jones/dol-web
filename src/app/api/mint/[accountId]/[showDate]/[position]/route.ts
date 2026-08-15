@@ -6,7 +6,7 @@ import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate, releaseClaim } from "@erikmuir/dol-lib/server/dapp";
 import { setPublishedCids, setImageCid, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
-import { isWhiteList } from "@/env";
+import { canMint } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
 //
@@ -54,7 +54,7 @@ export async function POST(
   const treasuryAccount = getRequired(PublicEnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
   const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
-  if (!mintEnabled && !isWhiteList(accountId)) {
+  if (!(await canMint(accountId, mintEnabled))) {
     return badRequest("Minting is disabled");
   }
 

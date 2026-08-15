@@ -12,10 +12,12 @@ vi.mock("@erikmuir/dol-lib/server/dapp", () => ({
 const setPublishedCidsMock = vi.fn();
 const setImageCidMock = vi.fn();
 const getPerformanceMock = vi.fn();
+const getAccountMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
   setImageCid: (...a: unknown[]) => setImageCidMock(...a),
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
+  getAccount: (...a: unknown[]) => getAccountMock(...a),
 }));
 
 vi.mock("@erikmuir/dol-lib/server/blockchain", () => ({
@@ -75,6 +77,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     setImageCidMock.mockResolvedValue({ success: true });
     submitNftMetadataUpdateMock.mockResolvedValue(true);
     getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
+    getAccountMock.mockResolvedValue(undefined);
   });
 
   it("returns txBytes as an explicit Buffer-shaped wrapper the client can reconstruct from", async () => {
@@ -185,5 +188,17 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
       "bafy-img-cid",
       "bafy-cid"
     );
+  });
+
+  // See PUNCHLIST.md Finding 27: blocked is a hard stop regardless of
+  // NEXT_PUBLIC_MINT_ENABLED (which this test file sets to "true").
+  it("rejects a blocked account even though minting is globally enabled", async () => {
+    getAccountMock.mockResolvedValue({ blocked: true });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.ok).toBe(false);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
   });
 });
