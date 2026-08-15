@@ -317,6 +317,9 @@ export const Performance = (): React.ReactNode => {
         case SerialErrorResponse.NO_SUPPLY:
           updateStatus(MintStatusDisplayText.NoSupply);
           break;
+        case SerialErrorResponse.TOO_MANY_LOCKED:
+          updateStatus(MintStatusDisplayText.TooManyLocked);
+          break;
         case SerialErrorResponse.METADATA_PUBLISH_FAILED:
           updateStatus(MintStatusDisplayText.MetadataPublishFailed);
           break;
