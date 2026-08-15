@@ -2,6 +2,7 @@
   "name": "dol-web",
   "version": "0.1.0",
   "description": "Duke of Lizards Web",
+  "private": true,
   "repository": {
     "type": "git",
     "url": "git+ssh@github.com:robot-jones/dol-web.git"
