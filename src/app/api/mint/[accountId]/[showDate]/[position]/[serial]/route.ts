@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPerformance, setSerial } from "@erikmuir/dol-lib/server/dynamo";
 import { PublicEnvKeys, getBoolean } from "@erikmuir/dol-lib/env";
 import { badRequest, StandardPayload, success } from "@/utils";
-import { isWhiteList } from "@/env";
+import { canMint } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial] (post-transfer endpoint)
 //
@@ -31,7 +31,7 @@ export async function POST(
   const { accountId, showDate, position, serial } = await params;
   const mintEnabled = getBoolean(PublicEnvKeys.NEXT_PUBLIC_MINT_ENABLED);
 
-  if (!mintEnabled && !isWhiteList(accountId)) {
+  if (!(await canMint(accountId, mintEnabled))) {
     return badRequest("Minting is disabled");
   }
 
