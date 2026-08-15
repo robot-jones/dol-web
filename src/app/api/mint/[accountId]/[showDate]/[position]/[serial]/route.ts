@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPerformance, setSerial } from "@erikmuir/dol-lib/server/dynamo";
-import { PublicEnvKeys, getBoolean } from "@erikmuir/dol-lib/env";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { canMint } from "@/mint-gate";
 
@@ -29,9 +28,8 @@ export async function POST(
   { params }: { params: Promise<PostTransferParams> }
 ): Promise<NextResponse<StandardPayload<boolean | string>>> {
   const { accountId, showDate, position, serial } = await params;
-  const mintEnabled = getBoolean(PublicEnvKeys.NEXT_PUBLIC_MINT_ENABLED);
 
-  if (!(await canMint(accountId, mintEnabled))) {
+  if (!(await canMint(accountId))) {
     return badRequest("Minting is disabled");
   }
 

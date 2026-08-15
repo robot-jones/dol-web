@@ -1,13 +1,13 @@
 const getPerformanceMock = vi.fn();
 const setSerialMock = vi.fn();
 const getAccountMock = vi.fn();
+const getAppConfigMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   setSerial: (...a: unknown[]) => setSerialMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
+  getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
 }));
-
-process.env.NEXT_PUBLIC_MINT_ENABLED = "true";
 
 import { POST } from "./route";
 
@@ -23,10 +23,21 @@ describe("/api/mint/[accountId]/[showDate]/[position]/[serial] POST", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAccountMock.mockResolvedValue(undefined);
+    getAppConfigMock.mockResolvedValue({ mintEnabled: true });
   });
 
   it("rejects a blocked account even though minting is globally enabled", async () => {
     getAccountMock.mockResolvedValue({ blocked: true });
+    const res = await call("0.0.1", "1998-07-29", "1", "7");
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(getPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  // See PUNCHLIST.md Finding 28: mintEnabled now comes from dol-app-config
+  // (getAppConfig), read live - not the old build-time NEXT_PUBLIC_MINT_ENABLED.
+  it("rejects an unlisted account while the soft switch is paused", async () => {
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false });
     const res = await call("0.0.1", "1998-07-29", "1", "7");
     const body = await res.json();
     expect(body.ok).toBe(false);
