@@ -13,7 +13,7 @@ export const TermsOfService = (): React.ReactNode => {
           <span className="font-bold">Effective Date:</span> 7/15/2025
         </div>
         <div className="text-gray-medium text-center text-xs pt-1">
-          <span className="font-bold">Last Updated:</span> 7/15/2025
+          <span className="font-bold">Last Updated:</span> 8/16/2026
         </div>
       </div>
       <div>
@@ -63,6 +63,14 @@ export const TermsOfService = (): React.ReactNode => {
           have no guaranteed or implied value beyond their groove. 🚫 No
           securities here — just vibes.
         </div>
+        <div className="pt-4">
+          Minting isn&apos;t always open to everyone at once. We may grant
+          certain wallets a <span className="font-bold">Ticket Stub</span>{" "}
+          for early access, pause minting temporarily, or close it
+          permanently once the Book reaches its page limit or otherwise
+          draws to a close. None of that changes what you already hold —
+          only what you&apos;re able to claim going forward.
+        </div>
       </div>
       {divider}
       <div>
@@ -106,6 +114,10 @@ export const TermsOfService = (): React.ReactNode => {
         <div>Duke of Lizards integrates:</div>
         <ul className="list-disc pl-8 pb-4">
           <li>
+            <span className="font-bold">WalletConnect</span> (wallet
+            connection)
+          </li>
+          <li>
             <span className="font-bold">Pinata.cloud</span> (IPFS pinning
             service)
           </li>
@@ -119,6 +131,10 @@ export const TermsOfService = (): React.ReactNode => {
           <li>
             <span className="font-bold">AWS DynamoDB</span> (tracking token
             states)
+          </li>
+          <li>
+            <span className="font-bold">Hedera Mirror Node</span> (reading
+            public blockchain data)
           </li>
           <li>
             <span className="font-bold">Vercel</span> (deployment)

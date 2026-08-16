@@ -13,7 +13,7 @@ export const PrivacyPolicy = (): React.ReactNode => {
           <span className="font-bold">Effective Date:</span> 7/15/2025
         </div>
         <div className="text-gray-medium text-center text-xs pt-1">
-          <span className="font-bold">Last Updated:</span> 7/15/2025
+          <span className="font-bold">Last Updated:</span> 8/16/2026
         </div>
       </div>
       <div>
@@ -36,8 +36,24 @@ export const PrivacyPolicy = (): React.ReactNode => {
             address alongside token metadata in a DynamoDB table. This helps us
             ensure nobody double-mints a jam from 12/30/97.
           </li>
+          <li>
+            <span className="font-bold">Account Status</span>
+            <br />
+            If you&apos;ve been handed a <span className="italic">Ticket
+            Stub</span> for early access, or blocked for abusing the minting
+            process (repeatedly locking and abandoning claims, say), we store
+            that status against your wallet address too.
+          </li>
         </ul>
-        <div>We do not collect:</div>
+        <div>
+          One more thing: Hedera is a public ledger, and we surface some of
+          this bookkeeping ourselves on the site&apos;s own{" "}
+          <span className="italic">Duke&apos;s Log</span> page — which
+          performances got claimed or released, and by which wallet. We
+          didn&apos;t invent that transparency; the chain already has it.
+          We&apos;re just not hiding it either.
+        </div>
+        <div className="pt-4">We do not collect:</div>
         <ul className="list-disc pl-8 pb-4">
           <li>Names</li>
           <li>Emails</li>
@@ -54,6 +70,11 @@ export const PrivacyPolicy = (): React.ReactNode => {
           <li>Track which NFT performances are locked or claimed</li>
           <li>Associate minted tokens with your wallet</li>
           <li>Prevent conflicts during the minting process</li>
+          <li>
+            Determine whether you get in early on a <span className="italic">
+            Ticket Stub</span> before the Book opens to everyone
+          </li>
+          <li>Block wallets that abuse the minting process</li>
         </ul>
         <div>
           We do <span className="font-bold">not</span> use your data for
@@ -69,11 +90,19 @@ export const PrivacyPolicy = (): React.ReactNode => {
         <div>Duke of Lizards uses:</div>
         <ul className="list-disc pl-8 pb-4">
           <li>
+            <span className="font-bold">WalletConnect</span> (wallet
+            connection)
+          </li>
+          <li>
             <span className="font-bold">Pinata.cloud</span> (IPFS pinning
             service)
           </li>
           <li>
             <span className="font-bold">AWS DynamoDB</span> (data storage)
+          </li>
+          <li>
+            <span className="font-bold">Hedera Mirror Node</span> (public
+            blockchain data)
           </li>
           <li>
             <span className="font-bold">Phish.net &amp; Phish.in APIs</span>{" "}
