@@ -390,4 +390,15 @@ audio {
   --dol-light: #f4f4e4;
 
   --color-cycle: var(--dol-blue), var(--dol-green), var(--dol-red), var(--dol-yellow);
+
+  /*
+   * Real height of the fixed <Header>, kept in sync at runtime by a
+   * ResizeObserver in Header.tsx - it changes with viewport width (nav
+   * wrapping) and with content like MintGateStatus appearing/disappearing.
+   * Anything that needs to sit flush against the header (the main content's
+   * top margin, HelpingFriendlyBookLayout's FilterTypePicker) should read
+   * this var instead of a hardcoded px guess, which silently goes stale the
+   * next time the header's contents change height.
+   */
+  --header-height: 174px;
 }

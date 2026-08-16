@@ -20,6 +20,13 @@ export const Overview = (): React.ReactElement => {
         forever securing its place in the Helping Friendly Book.
       </div>
       <div>
+        Know, too, that my generosity is not boundless. I have decreed that no
+        more than 555 pages may ever grace the Helping Friendly Book—a number
+        chosen with purpose, not caprice. Once the last page is claimed, the
+        Book shall close forevermore, and no soul, however loyal, may add to
+        it again.
+      </div>
+      <div>
         But be warned—once a performance is minted, no other shall lay claim to
         it. The pages of history are written by the swift.
       </div>

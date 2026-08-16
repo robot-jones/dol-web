@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { twMerge } from "tailwind-merge";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import {
+  CollectionMintStatus,
+  CollectionMintStatusDisplayText,
   DolColorHex,
   MintStatusDisplayText,
   PerformanceAttributes,
@@ -109,6 +111,7 @@ export const Performance = (): React.ReactNode => {
   // var. Undefined while loading defaults to false, same fail-closed
   // default the route side already uses.
   const mintEnabled = Boolean(appConfigStatus?.mintEnabled);
+  const collectionMintStatus = appConfigStatus?.collectionMintStatus;
 
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
@@ -556,10 +559,24 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
-    if (!mintEnabled && !whitelisted) {
+    // Ticket Stub early access only reads true pre-launch - a whitelisted
+    // account isn't "early" if the sale has already been paused, ended, or
+    // sold out, even though today's canMint gate (Finding 27) doesn't
+    // actually distinguish those cases server-side. Worth a look separately
+    // - this note describes the honest state, not necessarily everything
+    // the server would currently let a whitelisted account do.
+    if (collectionMintStatus === CollectionMintStatus.PRE && whitelisted) {
+      return (
+        <PageNote color="green" className="text-center">
+          {CollectionMintStatusDisplayText.PRE} But I saw you with a Ticket Stub in your hand, so you&apos;re allowed in early!
+        </PageNote>
+      );
+    }
+
+    if (collectionMintStatus && collectionMintStatus !== CollectionMintStatus.ACTIVE) {
       return (
         <PageNote color="red" className="text-center">
-          Public minting is currently disabled.
+          {CollectionMintStatusDisplayText[collectionMintStatus]}
         </PageNote>
       );
     }
@@ -573,19 +590,12 @@ export const Performance = (): React.ReactNode => {
     const other = getAttributeTypeLabel("Other", "text-gray-medium");
 
     return (
-      <>
-        {!mintEnabled && whitelisted && (
-          <PageNote color="green" className="text-center">
-            Public minting is currently disabled, but you&apos;re on the Guest List!
-          </PageNote>
-        )}
-        <div className="text-justify">
-          Feel free to modify or randomize the {customizable} attributes to your liking! When you mint,{" "}
-          they&apos;ll be written to the NFT&apos;s metadata on chain, along with the {fixed} attributes{" "}
-          — <em>including the MP3 link!</em> ({dynamic} and {other} attributes will not be written on chain,{" "}
-          but can still be viewed on this page.)
-        </div>
-      </>
+      <div className="text-justify">
+        Feel free to modify or randomize the {customizable} attributes to your liking! When you mint,{" "}
+        they&apos;ll be written to the NFT&apos;s metadata on chain, along with the {fixed} attributes{" "}
+        — <em>including the MP3 link!</em> ({dynamic} and {other} attributes will not be written on chain,{" "}
+        but can still be viewed on this page.)
+      </div>
     );
   };
 

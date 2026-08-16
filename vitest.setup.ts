@@ -42,3 +42,14 @@ vi.mock("next/server", () => {
 global.TextEncoder = global.TextEncoder || TextEncoder;
 // @ts-ignore
 global.TextDecoder = global.TextDecoder || TextDecoder;
+
+// jsdom doesn't implement ResizeObserver. Header.tsx uses one to keep the
+// --header-height CSS var in sync with the header's real rendered height;
+// components just need it to exist here, not to actually fire callbacks.
+global.ResizeObserver =
+  global.ResizeObserver ||
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };

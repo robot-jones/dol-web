@@ -50,7 +50,7 @@ export default async function RootLayout({
               <WalletConnectClient />
               <Header />
               <main className="grow shrink-0 basis-auto m-4">
-                <div className="flex flex-col items-center mx-auto max-w-[1024px] mt-[145px]">
+                <div className="flex flex-col items-center mx-auto max-w-[1024px] mt-[var(--header-height)]">
                   {children}
                 </div>
               </main>

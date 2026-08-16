@@ -9,7 +9,7 @@ export default function HelpingFriendlyBookLayout({
 }) {
   return (
     <div className="w-[320px] md:w-[500px] lg:w-[680px] xl:w-[900px] flex flex-col items-center gap-4 mt-8">
-      <div className="fixed top-[132px] z-20 w-full">
+      <div className="fixed top-[var(--header-height)] -translate-y-1/2 z-20 w-full">
         <FilterTypePicker />
       </div>
       {children}
