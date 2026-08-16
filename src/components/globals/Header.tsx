@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { twMerge } from "tailwind-merge";
 import { DiscordLink } from "../common/DiscordLink";
@@ -11,6 +11,7 @@ import { Wallet } from "./Wallet";
 
 export const Header = () => {
   const router = useRouter();
+  const headerRef = useRef<HTMLElement>(null);
 
   const handleBack = useCallback(() => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -21,8 +22,32 @@ export const Header = () => {
     }
   }, [router]);
 
+  // Publish the header's real rendered height as a CSS var so anything
+  // that needs to sit flush against it (main's top margin,
+  // HelpingFriendlyBookLayout's FilterTypePicker) can read the actual
+  // value instead of a hardcoded px guess that goes stale the next time
+  // this header's contents change height - a ResizeObserver rather than a
+  // one-time measurement because that height is genuinely dynamic (nav
+  // wrapping on narrow viewports being the main driver), not just a
+  // mount-time constant.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return undefined;
+    const setHeightVar = () => {
+      document.documentElement.style.setProperty(
+        "--header-height",
+        `${header.offsetHeight}px`
+      );
+    };
+    setHeightVar();
+    const observer = new ResizeObserver(setHeightVar);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <header
+      ref={headerRef}
       className={twMerge(
         "fixed top-0 w-full bg-gray-extra-dark",
         "border-b border-gray-dark-2 shadow-lg",

@@ -30,10 +30,16 @@ describe("canMint", () => {
     expect(await canMint("0.0.1")).toBe(false);
   });
 
-  it("lets a whitelisted account in early, before the gate opens", async () => {
+  it("lets a whitelisted account in early, before the gate has ever opened (no launchedAt)", async () => {
     getAccountMock.mockResolvedValueOnce({ whitelisted: true });
     getAppConfigMock.mockResolvedValueOnce({ mintEnabled: false });
     expect(await canMint("0.0.1")).toBe(true);
+  });
+
+  it("does NOT let a whitelisted account bypass a pause once the gate has already opened once", async () => {
+    getAccountMock.mockResolvedValueOnce({ whitelisted: true });
+    getAppConfigMock.mockResolvedValueOnce({ mintEnabled: false, launchedAt: 1700000000000 });
+    expect(await canMint("0.0.1")).toBe(false);
   });
 
   it("fails closed (mint disabled) when the config row doesn't exist yet", async () => {
