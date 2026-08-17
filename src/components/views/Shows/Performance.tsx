@@ -135,6 +135,16 @@ export const Performance = (): React.ReactNode => {
   // retry action attached.
   const [walletWaitTimedOut, setWalletWaitTimedOut] = useState(false);
   const walletWaitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // PUNCHLIST.md Finding 52's follow-up - self-service release of your own
+  // locked-but-unfinalized claim. See handleReleaseClick.
+  const [releasingClaim, setReleasingClaim] = useState(false);
+  // Set when the user releases while purchaseNft is still pending in this
+  // same tab - tells signAndFinalize's eventual continuation to back off
+  // instead of updating a UI the user has already moved past. A ref, not
+  // state: read inside signAndFinalize's async continuation after
+  // whatever render triggered the release, not something that itself
+  // needs to trigger a re-render.
+  const releasedWhilePendingRef = useRef(false);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -333,6 +343,57 @@ export const Performance = (): React.ReactNode => {
     }
   };
 
+  // PUNCHLIST.md Finding 52's follow-up. Reachable from two states in
+  // getMintButton: the `performance?.lockedBy` branch (your own lock, no
+  // reload needed) and, as of the revised design, the `preparedTx` branch
+  // too, once WALLET_WAIT_HINT_DELAY_MS has passed with no response. The
+  // earlier "requires a reload first" design turned out not to add real
+  // safety - reloading doesn't cancel anything on the wallet's side, the
+  // wallet call isn't tied to this page's lifecycle. The actual safety is
+  // Finding 52's on-chain ownership check inside releaseClaim itself,
+  // which applies here regardless of whether purchaseNft is still
+  // pending in this same tab.
+  //
+  // What reloading *did* incidentally avoid: a stale signAndFinalize
+  // continuation touching UI state after the user's already moved on. Now
+  // handled directly - releasedWhilePendingRef tells that continuation to
+  // back off once it eventually resolves, and preparedTx/status are reset
+  // immediately here rather than waiting on the network round-trip below,
+  // so the UI reflects the cancellation right away either way.
+  //
+  // The abort route itself always responds success regardless of whether
+  // releaseClaim actually released anything (pre-existing behavior, not
+  // new here) - revalidating afterward is what surfaces the true outcome
+  // either way: genuinely freed, or (if the transfer had actually gone
+  // through moments before this ran) the fresher performance data will
+  // show "Already Minted" instead.
+  const handleReleaseClick = async () => {
+    if (!preparedTx && !performance?.lockedBy) return;
+
+    if (preparedTx) {
+      releasedWhilePendingRef.current = true;
+      setPreparedTx(null);
+      updateStatus(MintStatusDisplayText.None);
+    }
+
+    setReleasingClaim(true);
+    try {
+      await fetchStandardJson(
+        `/api/mint/${accountId}/${date}/${position}/0/abort`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "USER_CANCELLED" }),
+        }
+      );
+    } catch (err) {
+      console.error("Release request failed:", err);
+    } finally {
+      setReleasingClaim(false);
+      mutatePerformance();
+    }
+  };
+
   const updateStatus = (newStatus: MintStatusDisplayText) => {
     setStatus(newStatus);
     console.log(newStatus);
@@ -505,6 +566,38 @@ export const Performance = (): React.ReactNode => {
       setWalletWaitTimedOut(false);
     }
 
+    // The user already released this claim themselves while purchaseNft
+    // was still pending (handleReleaseClick) - preparedTx/status were
+    // reset immediately there, so don't overwrite that with whatever this
+    // now-stale continuation would otherwise show.
+    if (releasedWhilePendingRef.current) {
+      releasedWhilePendingRef.current = false;
+      if (transferSuccess) {
+        // Rare race: released here, but the wallet call succeeded anyway
+        // moments later. Metadata's already correct on-chain (that
+        // happens pre-transfer), so the buyer has a fully valid NFT - the
+        // only thing missing is this app's own performance -> serial
+        // link, which releasing just cleared. Best-effort finalize
+        // attempt rather than silently dropping it: the post-transfer
+        // route's own claim-match check decides whether this can safely
+        // proceed (already covered by existing test coverage) - if the
+        // claim really is gone, this fails cleanly server-side and the
+        // orphaned NFT is left for manual reconciliation to find, same
+        // accepted-gap category as a tab closing mid-flow. Not shown to
+        // the user - they've already moved on to a UI that says this was
+        // cancelled.
+        console.warn(
+          "Wallet transfer succeeded after the user had already released this claim - attempting best-effort finalize.",
+          { date, position, serial }
+        );
+        fetchStandardJson<boolean>(
+          `/api/mint/${accountId}/${date}/${position}/${serial}`,
+          { method: "POST" }
+        ).catch((err) => console.error("Best-effort finalize after late release failed:", err));
+      }
+      return;
+    }
+
     if (!transferSuccess) {
       updateStatus(MintStatusDisplayText.TransferAborted);
       setPreparedTx(null);
@@ -631,17 +724,16 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (preparedTx) {
-      // PUNCHLIST.md Finding 51 superseded Finding 32's original fix here:
-      // signAndFinalize now fires automatically as soon as preparedTx is
-      // set, so there's no longer a manual "Confirm in Wallet"/"Cancel"
-      // pair to guard against double-clicking - there's nothing left for
-      // the user to click at all while this is in flight, just a disabled
-      // status button and (once WALLET_WAIT_HINT_DELAY_MS has passed with
-      // no response) a passive hint. No "Cancel" option here deliberately -
-      // see Finding 52: releaseClaim has no on-chain ownership check, so
-      // canceling mid-wait risks releasing a claim that's already been
-      // signed and paid for, the exact class of bug Finding 32 closed for
-      // the old buttons.
+      // Release is only offered once walletWaitTimedOut has fired - not
+      // from the first instant, so a normal-speed approval never even
+      // sees the option, and never during UpdatingMetadata (status moves
+      // off InitiatingTransfer before that, resetting walletWaitTimedOut
+      // to false in signAndFinalize's own finally block) - by then the
+      // transfer has already succeeded, a known fact, not a maybe, so
+      // there's nothing left to legitimately release. See
+      // handleReleaseClick's own comment for how this stays safe despite
+      // purchaseNft potentially still being in flight in this same tab.
+      const canRelease = walletWaitTimedOut;
       return (
         <div className="flex flex-col items-center gap-2">
           <DolButton color="blue" roundedFull disabled>
@@ -649,10 +741,22 @@ export const Performance = (): React.ReactNode => {
               ? "Updating Metadata..."
               : "Waiting for Your Wallet..."}
           </DolButton>
-          {walletWaitTimedOut && (
-            <div className="text-xs text-gray-medium text-center max-w-[280px]">
-              Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
-            </div>
+          {canRelease && (
+            <>
+              <div className="text-xs text-gray-medium text-center max-w-[280px]">
+                Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
+              </div>
+              <DolButton
+                size="sm"
+                color="red"
+                outline
+                roundedFull
+                onClick={handleReleaseClick}
+                disabled={releasingClaim}
+              >
+                {releasingClaim ? "Releasing..." : "Release"}
+              </DolButton>
+            </>
           )}
           {getLockedForNote(preparedTx.lockedAt)}
         </div>
@@ -664,9 +768,30 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (performance?.lockedBy) {
+      // Self-service release for your own claim - see PUNCHLIST.md Finding
+      // 52, which made this safe: releaseClaim now verifies real on-chain
+      // ownership before releasing anything, so a click here either
+      // genuinely frees the performance or (if the transfer actually went
+      // through in the interim) is refused and the revalidation below
+      // simply reveals the true "Already Minted" state instead - never a
+      // silent double-release. Only offered for your own lock; releasing
+      // someone else's claim is still admin-script territory.
+      const isOwnLock = performance.lockedBy === accountId;
       return (
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-2">
           <DolButton color="gray" roundedFull disabled>Locked</DolButton>
+          {isOwnLock && (
+            <DolButton
+              size="sm"
+              color="red"
+              outline
+              roundedFull
+              onClick={handleReleaseClick}
+              disabled={releasingClaim}
+            >
+              {releasingClaim ? "Releasing..." : "Release"}
+            </DolButton>
+          )}
           {getLockedForNote(performance.lockedAt)}
         </div>
       );
