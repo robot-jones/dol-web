@@ -31,6 +31,7 @@ import {
   subjects,
   getSetText,
 } from "@erikmuir/dol-lib/dapp";
+import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { Loading } from "@/components/common/Loading";
 import { MintStatusIndicator } from "@/components/common/MintStatusIndicator";
 import {
@@ -70,6 +71,26 @@ type PreparedTransfer = {
   lockedAt?: number;
 };
 
+// PUNCHLIST.md Finding 50: the pre-transfer route does claim + render + two
+// sequential IPFS uploads + an on-chain metadata update in one request/
+// response - it's not streaming, so the client has no way to know when each
+// real step finishes, only that the whole thing is still in flight. This is
+// an approximate, client-side-only sequence, not a true progress readout
+// tied to the server's actual step boundaries (that would need the API
+// route itself to stream - a bigger change, parked as Finding 51's
+// "decoupled" architecture idea covers similar ground). Ordered to roughly
+// match the route's real steps and deliberately stops advancing at the last
+// message instead of looping, so a slow cold render reads as "still going"
+// rather than "stuck in a loop."
+const CLAIM_PROGRESS_STEPS = [
+  MintStatusDisplayText.Claiming,
+  "Rendering your NFT image...",
+  "Uploading to IPFS...",
+  "Finalizing on-chain metadata...",
+  "Almost there...",
+] as const;
+const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
+
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
   const pathParts = pathname.split("/");
@@ -92,6 +113,9 @@ export const Performance = (): React.ReactNode => {
   // getMintButton uses to show "Confirm in Wallet" instead of the generic
   // "Locked" state.
   const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
+  // Which message in CLAIM_PROGRESS_STEPS to show - see Finding 50's note
+  // above CLAIM_PROGRESS_STEPS for why this is approximate/client-side only.
+  const [claimProgressStep, setClaimProgressStep] = useState(0);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -129,6 +153,23 @@ export const Performance = (): React.ReactNode => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [performance?.lockedBy, preparedTx]);
+
+  // Advances the Finding 50 progress message while the claim/prepare
+  // request is in flight, resetting once it resolves (success or failure -
+  // status always moves off Claiming either way) so the next attempt starts
+  // from the first message again.
+  useEffect(() => {
+    if (status !== MintStatusDisplayText.Claiming) {
+      setClaimProgressStep(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setClaimProgressStep((step) =>
+        Math.min(step + 1, CLAIM_PROGRESS_STEPS.length - 1)
+      );
+    }, CLAIM_PROGRESS_STEP_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [status]);
 
   // Update performance attributes when sources change
   useEffect(() => {
@@ -603,8 +644,21 @@ export const Performance = (): React.ReactNode => {
   };
 
   const getStatusText = (): React.ReactNode => {
-    return !performanceLoading &&
-      status !== MintStatusDisplayText.None &&
+    if (performanceLoading) return null;
+
+    // Finding 50: while claiming/preparing, show the cycling progress
+    // message (+ a small spinner, since this step alone can run long) in
+    // place of the single static "Claiming performance..." text.
+    if (status === MintStatusDisplayText.Claiming) {
+      return (
+        <div className="flex items-center gap-2 text-dol-yellow">
+          <AnimatedDonut sizeInPixels={16} />
+          <span>{CLAIM_PROGRESS_STEPS[claimProgressStep]}</span>
+        </div>
+      );
+    }
+
+    return status !== MintStatusDisplayText.None &&
       status !== MintStatusDisplayText.AlreadyMinted &&
       // Redundant with the "Confirm in Wallet" button label itself.
       status !== MintStatusDisplayText.ReadyToSign ? (
