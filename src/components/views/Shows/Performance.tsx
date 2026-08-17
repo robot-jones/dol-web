@@ -135,7 +135,7 @@ export const Performance = (): React.ReactNode => {
   const { setlists, setlistsLoading } = useSetlists(date);
   const { song, songLoading } = useSong(songId);
   const { track, trackLoading } = useTrack(date, parsedPosition);
-  const { performance, performanceLoading } = usePerformance(date, parsedPosition);
+  const { performance, performanceLoading, mutatePerformance } = usePerformance(date, parsedPosition);
   const { metadata, metadataLoading } = useNftMetadata(hfbCollectionId, performance?.serial);
   const { accountId, walletInterface } = useWalletInterface();
   const { isAssociated, isAssociatedLoading, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
@@ -396,6 +396,11 @@ export const Performance = (): React.ReactNode => {
       } catch (abortErr) {
         console.error("Cleanup abort request failed:", abortErr);
       }
+      // PUNCHLIST.md's mint-flow-staleness fix: the claim may have been
+      // released server-side just above - revalidate rather than leaving
+      // this tab's cached performance (and MintStatusIndicator, which
+      // shares it) showing a stale lockedBy.
+      mutatePerformance();
       return;
     }
 
@@ -438,6 +443,7 @@ export const Performance = (): React.ReactNode => {
           body: JSON.stringify({ reason: "SYSTEM_FAILURE" }),
         }
       );
+      mutatePerformance();
       return;
     }
 
@@ -503,6 +509,9 @@ export const Performance = (): React.ReactNode => {
       } catch (err) {
         console.error("Cleanup abort request failed:", err);
       }
+      // See the mutatePerformance note below - same staleness fix, this is
+      // the wallet-rejected/failed-transfer exit instead of the success one.
+      mutatePerformance();
       return;
     }
 
@@ -526,6 +535,17 @@ export const Performance = (): React.ReactNode => {
     }
 
     setPreparedTx(null);
+    // Found live 2026-08-17: after a real successful mint, the status text
+    // correctly updated ("Mint complete!"), but MintStatusIndicator and the
+    // mint button's own "Locked" fallback both stayed stuck showing the
+    // pre-mint state - they read `performance` (SWR-cached), and nothing
+    // told SWR the server-side lockedBy/serial had just changed underneath
+    // it. `preparedTx` going null is local React state, so it updates
+    // instantly; `performance` doesn't, until this. Revalidating here
+    // (success or failure - either way the server-side state just changed)
+    // is what makes "the rest of the view" catch up immediately instead of
+    // waiting on SWR's own polling/focus-revalidation to eventually notice.
+    mutatePerformance();
     updateStatus(
       metadataUpdateSuccess
         ? MintStatusDisplayText.MintComplete

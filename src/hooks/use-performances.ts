@@ -19,7 +19,7 @@ export function usePerformances(showDate: string) {
 
 export function usePerformance(showDate: string, position?: number) {
   const url = position ? `/api/performances/${showDate}/${position}` : null;
-  const { data, isLoading, error } = useSWR<DolPerformance>(
+  const { data, isLoading, error, mutate } = useSWR<DolPerformance>(
     url,
     fetchStandardJson
   );
@@ -27,5 +27,6 @@ export function usePerformance(showDate: string, position?: number) {
     performance: data,
     performanceLoading: isLoading,
     performanceError: error,
+    mutatePerformance: mutate,
   };
 }
