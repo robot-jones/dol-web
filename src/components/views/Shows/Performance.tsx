@@ -530,12 +530,22 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (preparedTx) {
+      // PUNCHLIST.md Finding 32: these used to stay enabled through
+      // InitiatingTransfer/UpdatingMetadata (the real network time inside
+      // handleSignClick), so a user could double-click "Confirm in Wallet"
+      // (double wallet invocation) or hit "Cancel" after already signing
+      // but before the metadata update resolved, aborting/releasing a
+      // claim that may already be paid for. Same disabling approach the
+      // main mint button below already uses for its own in-flight states.
+      const signInFlight =
+        status === MintStatusDisplayText.InitiatingTransfer ||
+        status === MintStatusDisplayText.UpdatingMetadata;
       return (
         <div className="flex flex-col items-center gap-2">
-          <DolButton color="blue" roundedFull onClick={handleSignClick}>
+          <DolButton color="blue" roundedFull onClick={handleSignClick} disabled={signInFlight}>
             Confirm in Wallet
           </DolButton>
-          <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick}>
+          <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick} disabled={signInFlight}>
             Cancel
           </DolButton>
           {getLockedForNote(preparedTx.lockedAt)}
