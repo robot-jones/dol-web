@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { twMerge } from "tailwind-merge";
@@ -91,6 +91,14 @@ const CLAIM_PROGRESS_STEPS = [
 ] as const;
 const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
 
+// PUNCHLIST.md Finding 51: how long to wait for the wallet to respond
+// before showing a passive hint that it may have opened in another window.
+// Deliberately not a retry/cancel trigger - see the finding's writeup for
+// why (no reliable way to tell "never got the request" from "pending, not
+// yet approved" from here, so a second wallet call risks a double
+// submission of the same transaction).
+const WALLET_WAIT_HINT_DELAY_MS = 6000;
+
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
   const pathParts = pathname.split("/");
@@ -109,13 +117,19 @@ export const Performance = (): React.ReactNode => {
   const [showImageAttributes, setShowImageAttributes] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
   // Set once handleClaimClick's server round-trip finishes and cleared once
-  // handleSignClick/handleCancelClick resolves - the "am I mid-flow" signal
-  // getMintButton uses to show "Confirm in Wallet" instead of the generic
-  // "Locked" state.
+  // signAndFinalize resolves - the "am I mid-flow" signal getMintButton
+  // uses to show "Waiting for Your Wallet..." instead of the generic
+  // "Locked" state. As of Finding 51, this window is no longer a pause
+  // waiting on a second click - signAndFinalize fires automatically.
   const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
   // Which message in CLAIM_PROGRESS_STEPS to show - see Finding 50's note
   // above CLAIM_PROGRESS_STEPS for why this is approximate/client-side only.
   const [claimProgressStep, setClaimProgressStep] = useState(0);
+  // Whether to show Finding 51's passive "check for another window" hint -
+  // see WALLET_WAIT_HINT_DELAY_MS above for why this is display-only, no
+  // retry action attached.
+  const [walletWaitTimedOut, setWalletWaitTimedOut] = useState(false);
+  const walletWaitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -319,15 +333,21 @@ export const Performance = (): React.ReactNode => {
     console.log(newStatus);
   };
 
-  // Split into two clicks - claim/prepare, then a separate sign-in-wallet
-  // click - rather than one continuous flow. Browsers only allow a wallet
-  // popup to open/focus without being blocked if it happens synchronously
-  // within a real user gesture; the claim+render+upload round-trip between
-  // the original click and the wallet call broke that chain, so HashPack's
-  // window had to be switched to manually instead of coming to the front on
-  // its own. handleSignClick fires from its own fresh click, so the gesture
-  // chain is intact when it reaches the wallet. See PUNCHLIST.md's two-click
-  // flow item.
+  // PUNCHLIST.md Finding 51: this used to require a second, separate click
+  // (handleSignClick) after this claim/prepare step, specifically because
+  // browsers only reliably let a wallet popup open/focus without being
+  // blocked when it happens from a fresh, direct user gesture - the
+  // claim+render+upload round-trip here broke that chain, so HashPack's
+  // window had to be found and switched to manually instead of coming to
+  // the front on its own (see Phase 7's history for the original incident).
+  // As of Finding 51, signAndFinalize now fires automatically once this
+  // resolves, no second click required - but that's a deliberate bet, not
+  // a confirmed fix: firing from here is not a fresh gesture either (it's
+  // code continuing after this same multi-second await), so it may not
+  // reliably avoid the original focus problem. The passive "check for
+  // another window" hint in getMintButton is the safety net for when it
+  // doesn't; needs a real testnet mint to know how often that hint actually
+  // shows up in practice.
   const handleClaimClick = async () => {
     if (!pageLoaded || !setlist) {
       return;
@@ -422,14 +442,25 @@ export const Performance = (): React.ReactNode => {
     }
 
     setPreparedTx({ serial, txBytes, lockedAt });
-    updateStatus(MintStatusDisplayText.ReadyToSign);
+    // No second click here as of Finding 51 - see the comment above this
+    // function for the honest caveat on whether this reliably preserves a
+    // "fresh gesture" the way the old separate click did.
+    await signAndFinalize({ serial, txBytes, lockedAt });
   };
 
-  const handleSignClick = async () => {
-    if (!preparedTx) return;
-    const { serial, txBytes } = preparedTx;
-
+  // Split out from handleClaimClick so both the auto-continue above and
+  // (were it ever needed again) a manual retry could share one
+  // implementation. Previously this was handleSignClick, its own click
+  // handler fired by a separate "Confirm in Wallet" button - see
+  // PUNCHLIST.md Finding 51.
+  const signAndFinalize = async ({ serial, txBytes }: PreparedTransfer) => {
     updateStatus(MintStatusDisplayText.InitiatingTransfer);
+    setWalletWaitTimedOut(false);
+    walletWaitTimeoutRef.current = setTimeout(
+      () => setWalletWaitTimedOut(true),
+      WALLET_WAIT_HINT_DELAY_MS
+    );
+
     let transferSuccess = false;
     try {
       const nftId = new NftId(TokenId.fromString(hfbCollectionId), serial);
@@ -442,6 +473,14 @@ export const Performance = (): React.ReactNode => {
       );
     } catch (err) {
       console.error("Transaction error:", err);
+    } finally {
+      // The wait is over either way (resolved, however it resolved) - stop
+      // the hint timer and hide the hint if it had already fired.
+      if (walletWaitTimeoutRef.current) {
+        clearTimeout(walletWaitTimeoutRef.current);
+        walletWaitTimeoutRef.current = null;
+      }
+      setWalletWaitTimedOut(false);
     }
 
     if (!transferSuccess) {
@@ -491,21 +530,6 @@ export const Performance = (): React.ReactNode => {
       metadataUpdateSuccess
         ? MintStatusDisplayText.MintComplete
         : MintStatusDisplayText.FailedToUpdateMetadata
-    );
-  };
-
-  const handleCancelClick = async () => {
-    if (!preparedTx) return;
-    const { serial } = preparedTx;
-    setPreparedTx(null);
-    updateStatus(MintStatusDisplayText.None);
-    await fetchStandardJson(
-      `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "USER_CANCELLED" }),
-      }
     );
   };
 
@@ -571,24 +595,29 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (preparedTx) {
-      // PUNCHLIST.md Finding 32: these used to stay enabled through
-      // InitiatingTransfer/UpdatingMetadata (the real network time inside
-      // handleSignClick), so a user could double-click "Confirm in Wallet"
-      // (double wallet invocation) or hit "Cancel" after already signing
-      // but before the metadata update resolved, aborting/releasing a
-      // claim that may already be paid for. Same disabling approach the
-      // main mint button below already uses for its own in-flight states.
-      const signInFlight =
-        status === MintStatusDisplayText.InitiatingTransfer ||
-        status === MintStatusDisplayText.UpdatingMetadata;
+      // PUNCHLIST.md Finding 51 superseded Finding 32's original fix here:
+      // signAndFinalize now fires automatically as soon as preparedTx is
+      // set, so there's no longer a manual "Confirm in Wallet"/"Cancel"
+      // pair to guard against double-clicking - there's nothing left for
+      // the user to click at all while this is in flight, just a disabled
+      // status button and (once WALLET_WAIT_HINT_DELAY_MS has passed with
+      // no response) a passive hint. No "Cancel" option here deliberately -
+      // see Finding 52: releaseClaim has no on-chain ownership check, so
+      // canceling mid-wait risks releasing a claim that's already been
+      // signed and paid for, the exact class of bug Finding 32 closed for
+      // the old buttons.
       return (
         <div className="flex flex-col items-center gap-2">
-          <DolButton color="blue" roundedFull onClick={handleSignClick} disabled={signInFlight}>
-            Confirm in Wallet
+          <DolButton color="blue" roundedFull disabled>
+            {status === MintStatusDisplayText.UpdatingMetadata
+              ? "Updating Metadata..."
+              : "Waiting for Your Wallet..."}
           </DolButton>
-          <DolButton size="sm" color="gray" outline roundedFull onClick={handleCancelClick} disabled={signInFlight}>
-            Cancel
-          </DolButton>
+          {walletWaitTimedOut && (
+            <div className="text-xs text-gray-medium text-center max-w-[280px]">
+              Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
+            </div>
+          )}
           {getLockedForNote(preparedTx.lockedAt)}
         </div>
       );
@@ -658,10 +687,12 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
+    // MintStatusDisplayText.ReadyToSign is never set anymore as of Finding
+    // 51 (signAndFinalize fires automatically, no in-between state to
+    // announce) - not excluded here for that reason anymore, it just never
+    // occurs.
     return status !== MintStatusDisplayText.None &&
-      status !== MintStatusDisplayText.AlreadyMinted &&
-      // Redundant with the "Confirm in Wallet" button label itself.
-      status !== MintStatusDisplayText.ReadyToSign ? (
+      status !== MintStatusDisplayText.AlreadyMinted ? (
       <div className="text-dol-yellow">{status}</div>
     ) : null;
   };
