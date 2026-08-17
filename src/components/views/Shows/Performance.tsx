@@ -453,6 +453,17 @@ export const Performance = (): React.ReactNode => {
     }
 
     setPreparedTx({ serial, txBytes, lockedAt });
+    // The claim genuinely just succeeded server-side - revalidate now
+    // rather than leaving MintStatusIndicator (and the mint button's own
+    // "Locked" fallback) showing stale pre-claim data through the entire
+    // wallet-wait phase too, only catching up once signAndFinalize's own
+    // mutatePerformance calls fire at the very end. This is the earliest
+    // point the client can honestly know the lock landed - the pre-transfer
+    // route is one non-streaming request, so there's no earlier signal to
+    // act on (claimPerformance runs first server-side, well before the
+    // render/upload/on-chain-update work the rest of this request does, but
+    // nothing is observable client-side until the whole request resolves).
+    mutatePerformance();
     // No second click here as of Finding 51 - see the comment above this
     // function for the honest caveat on whether this reliably preserves a
     // "fresh gesture" the way the old separate click did.
