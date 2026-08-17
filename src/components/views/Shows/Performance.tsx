@@ -96,8 +96,13 @@ const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
 // Deliberately not a retry/cancel trigger - see the finding's writeup for
 // why (no reliable way to tell "never got the request" from "pending, not
 // yet approved" from here, so a second wallet call risks a double
-// submission of the same transaction).
-const WALLET_WAIT_HINT_DELAY_MS = 6000;
+// submission of the same transaction). Was 6000 originally, dropped to
+// 2000 2026-08-17 after live testing showed the wallet reliably grabbing
+// focus in well under a second - long enough to stay past a normal fast
+// approval (no flicker on the path that's actually working), short enough
+// to cut down how long a genuinely stuck user sits looking at an
+// unexplained disabled button.
+const WALLET_WAIT_HINT_DELAY_MS = 2000;
 
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
