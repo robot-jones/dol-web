@@ -71,17 +71,9 @@ type PreparedTransfer = {
   lockedAt?: number;
 };
 
-// PUNCHLIST.md Finding 50: the pre-transfer route does claim + render + two
-// sequential IPFS uploads + an on-chain metadata update in one request/
-// response - it's not streaming, so the client has no way to know when each
-// real step finishes, only that the whole thing is still in flight. This is
-// an approximate, client-side-only sequence, not a true progress readout
-// tied to the server's actual step boundaries (that would need the API
-// route itself to stream - a bigger change, parked as Finding 51's
-// "decoupled" architecture idea covers similar ground). Ordered to roughly
-// match the route's real steps and deliberately stops advancing at the last
-// message instead of looping, so a slow cold render reads as "still going"
-// rather than "stuck in a loop."
+// Approximate progress only - the pre-transfer route isn't streaming, so
+// there's no real signal for when each step finishes (Finding 50). Stops
+// advancing at the last message instead of looping.
 const CLAIM_PROGRESS_STEPS = [
   MintStatusDisplayText.Claiming,
   "Rendering your NFT image...",
@@ -91,17 +83,9 @@ const CLAIM_PROGRESS_STEPS = [
 ] as const;
 const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
 
-// PUNCHLIST.md Finding 51: how long to wait for the wallet to respond
-// before showing a passive hint that it may have opened in another window.
-// Deliberately not a retry/cancel trigger - see the finding's writeup for
-// why (no reliable way to tell "never got the request" from "pending, not
-// yet approved" from here, so a second wallet call risks a double
-// submission of the same transaction). Was 6000 originally, dropped to
-// 2000 2026-08-17 after live testing showed the wallet reliably grabbing
-// focus in well under a second - long enough to stay past a normal fast
-// approval (no flicker on the path that's actually working), short enough
-// to cut down how long a genuinely stuck user sits looking at an
-// unexplained disabled button.
+// How long to wait for the wallet before showing the "check another
+// window" hint (Finding 51). Confirmed via live testing short enough to
+// avoid flicker on a normal approval.
 const WALLET_WAIT_HINT_DELAY_MS = 2000;
 
 export const Performance = (): React.ReactNode => {
@@ -121,29 +105,17 @@ export const Performance = (): React.ReactNode => {
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
-  // Set once handleClaimClick's server round-trip finishes and cleared once
-  // signAndFinalize resolves - the "am I mid-flow" signal getMintButton
-  // uses to show "Waiting for Your Wallet..." instead of the generic
-  // "Locked" state. As of Finding 51, this window is no longer a pause
-  // waiting on a second click - signAndFinalize fires automatically.
+  // "Am I mid-flow" - set once claimed, cleared once signAndFinalize
+  // resolves (Finding 51: fires automatically, no second click).
   const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
-  // Which message in CLAIM_PROGRESS_STEPS to show - see Finding 50's note
-  // above CLAIM_PROGRESS_STEPS for why this is approximate/client-side only.
+  // Index into CLAIM_PROGRESS_STEPS.
   const [claimProgressStep, setClaimProgressStep] = useState(0);
-  // Whether to show Finding 51's passive "check for another window" hint -
-  // see WALLET_WAIT_HINT_DELAY_MS above for why this is display-only, no
-  // retry action attached.
   const [walletWaitTimedOut, setWalletWaitTimedOut] = useState(false);
   const walletWaitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // PUNCHLIST.md Finding 52's follow-up - self-service release of your own
-  // locked-but-unfinalized claim. See handleReleaseClick.
   const [releasingClaim, setReleasingClaim] = useState(false);
-  // Set when the user releases while purchaseNft is still pending in this
-  // same tab - tells signAndFinalize's eventual continuation to back off
-  // instead of updating a UI the user has already moved past. A ref, not
-  // state: read inside signAndFinalize's async continuation after
-  // whatever render triggered the release, not something that itself
-  // needs to trigger a re-render.
+  // Set if the user releases while purchaseNft is still pending in this
+  // tab - tells signAndFinalize's later continuation not to touch UI
+  // state the user's already moved past.
   const releasedWhilePendingRef = useRef(false);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
@@ -183,10 +155,7 @@ export const Performance = (): React.ReactNode => {
     return () => clearInterval(interval);
   }, [performance?.lockedBy, preparedTx]);
 
-  // Advances the Finding 50 progress message while the claim/prepare
-  // request is in flight, resetting once it resolves (success or failure -
-  // status always moves off Claiming either way) so the next attempt starts
-  // from the first message again.
+  // Advances CLAIM_PROGRESS_STEPS while claiming, resets otherwise.
   useEffect(() => {
     if (status !== MintStatusDisplayText.Claiming) {
       setClaimProgressStep(0);
@@ -343,30 +312,13 @@ export const Performance = (): React.ReactNode => {
     }
   };
 
-  // PUNCHLIST.md Finding 52's follow-up. Reachable from two states in
-  // getMintButton: the `performance?.lockedBy` branch (your own lock, no
-  // reload needed) and, as of the revised design, the `preparedTx` branch
-  // too, once WALLET_WAIT_HINT_DELAY_MS has passed with no response. The
-  // earlier "requires a reload first" design turned out not to add real
-  // safety - reloading doesn't cancel anything on the wallet's side, the
-  // wallet call isn't tied to this page's lifecycle. The actual safety is
-  // Finding 52's on-chain ownership check inside releaseClaim itself,
-  // which applies here regardless of whether purchaseNft is still
-  // pending in this same tab.
-  //
-  // What reloading *did* incidentally avoid: a stale signAndFinalize
-  // continuation touching UI state after the user's already moved on. Now
-  // handled directly - releasedWhilePendingRef tells that continuation to
-  // back off once it eventually resolves, and preparedTx/status are reset
-  // immediately here rather than waiting on the network round-trip below,
-  // so the UI reflects the cancellation right away either way.
-  //
-  // The abort route itself always responds success regardless of whether
-  // releaseClaim actually released anything (pre-existing behavior, not
-  // new here) - revalidating afterward is what surfaces the true outcome
-  // either way: genuinely freed, or (if the transfer had actually gone
-  // through moments before this ran) the fresher performance data will
-  // show "Already Minted" instead.
+  // Self-service release (Finding 52) - safe even if purchaseNft is still
+  // pending in this tab, since releaseClaim itself verifies on-chain
+  // ownership before releasing anything. releasedWhilePendingRef tells
+  // signAndFinalize's later continuation not to touch UI state we're
+  // about to reset here. The abort route always responds success
+  // regardless of outcome, so the revalidation below is what surfaces the
+  // true result either way.
   const handleReleaseClick = async () => {
     if (!preparedTx && !performance?.lockedBy) return;
 
@@ -399,21 +351,10 @@ export const Performance = (): React.ReactNode => {
     console.log(newStatus);
   };
 
-  // PUNCHLIST.md Finding 51: this used to require a second, separate click
-  // (handleSignClick) after this claim/prepare step, specifically because
-  // browsers only reliably let a wallet popup open/focus without being
-  // blocked when it happens from a fresh, direct user gesture - the
-  // claim+render+upload round-trip here broke that chain, so HashPack's
-  // window had to be found and switched to manually instead of coming to
-  // the front on its own (see Phase 7's history for the original incident).
-  // As of Finding 51, signAndFinalize now fires automatically once this
-  // resolves, no second click required - but that's a deliberate bet, not
-  // a confirmed fix: firing from here is not a fresh gesture either (it's
-  // code continuing after this same multi-second await), so it may not
-  // reliably avoid the original focus problem. The passive "check for
-  // another window" hint in getMintButton is the safety net for when it
-  // doesn't; needs a real testnet mint to know how often that hint actually
-  // shows up in practice.
+  // signAndFinalize fires automatically once this resolves (Finding 51) -
+  // no second click, even though this isn't technically a fresh user
+  // gesture either. getMintButton's "check another window" hint is the
+  // fallback for when the wallet doesn't grab focus on its own.
   const handleClaimClick = async () => {
     if (!pageLoaded || !setlist) {
       return;
@@ -425,12 +366,8 @@ export const Performance = (): React.ReactNode => {
 
     updateStatus(MintStatusDisplayText.Claiming);
 
-    // PUNCHLIST.md Finding 31: this used to be a bare `await` with no
-    // try/catch. `fetchStandardJson` throws on any non-ok response (a real
-    // server error, not one of the modeled SerialErrorResponse cases the
-    // switch below handles), and status was already set to Claiming above -
-    // an uncaught throw here left the button disabled forever with no
-    // feedback and no way to retry short of a reload.
+    // Unhandled throw here used to leave the button disabled forever
+    // (Finding 31) - fetchStandardJson throws on any unmodeled error.
     let response: PreTransferResponse;
     try {
       response = await fetchStandardJson<PreTransferResponse>(
@@ -444,12 +381,10 @@ export const Performance = (): React.ReactNode => {
     } catch (err) {
       console.error("Claim request failed:", err);
       updateStatus(MintStatusDisplayText.LockNotAcquired);
-      // We can't tell from here whether a claim actually landed
-      // server-side before the failure - release defensively, same as the
-      // known-failure cases below (the serial in the URL is unused by the
-      // abort route when there's no real claim to speak of). Swallow any
-      // error from the cleanup attempt itself so a failed abort can't
-      // re-stick the UI right after we just unstuck it.
+      // Can't tell if a claim landed before the failure - release
+      // defensively (serial in the URL is unused by the abort route when
+      // there's nothing to release). Revalidate performance afterward so
+      // MintStatusIndicator doesn't keep showing a stale lockedBy.
       try {
         await fetchStandardJson(
           `/api/mint/${accountId}/${date}/${position}/0/abort`,
@@ -462,10 +397,6 @@ export const Performance = (): React.ReactNode => {
       } catch (abortErr) {
         console.error("Cleanup abort request failed:", abortErr);
       }
-      // PUNCHLIST.md's mint-flow-staleness fix: the claim may have been
-      // released server-side just above - revalidate rather than leaving
-      // this tab's cached performance (and MintStatusIndicator, which
-      // shares it) showing a stale lockedBy.
       mutatePerformance();
       return;
     }
@@ -514,28 +445,15 @@ export const Performance = (): React.ReactNode => {
     }
 
     setPreparedTx({ serial, txBytes, lockedAt });
-    // The claim genuinely just succeeded server-side - revalidate now
-    // rather than leaving MintStatusIndicator (and the mint button's own
-    // "Locked" fallback) showing stale pre-claim data through the entire
-    // wallet-wait phase too, only catching up once signAndFinalize's own
-    // mutatePerformance calls fire at the very end. This is the earliest
-    // point the client can honestly know the lock landed - the pre-transfer
-    // route is one non-streaming request, so there's no earlier signal to
-    // act on (claimPerformance runs first server-side, well before the
-    // render/upload/on-chain-update work the rest of this request does, but
-    // nothing is observable client-side until the whole request resolves).
+    // Revalidate now, the earliest point the client can honestly know the
+    // lock landed, rather than leaving MintStatusIndicator stale until
+    // signAndFinalize finishes.
     mutatePerformance();
-    // No second click here as of Finding 51 - see the comment above this
-    // function for the honest caveat on whether this reliably preserves a
-    // "fresh gesture" the way the old separate click did.
     await signAndFinalize({ serial, txBytes, lockedAt });
   };
 
-  // Split out from handleClaimClick so both the auto-continue above and
-  // (were it ever needed again) a manual retry could share one
-  // implementation. Previously this was handleSignClick, its own click
-  // handler fired by a separate "Confirm in Wallet" button - see
-  // PUNCHLIST.md Finding 51.
+  // Formerly its own click handler (handleSignClick, "Confirm in
+  // Wallet") - now called automatically from handleClaimClick (Finding 51).
   const signAndFinalize = async ({ serial, txBytes }: PreparedTransfer) => {
     updateStatus(MintStatusDisplayText.InitiatingTransfer);
     setWalletWaitTimedOut(false);
@@ -566,30 +484,17 @@ export const Performance = (): React.ReactNode => {
       setWalletWaitTimedOut(false);
     }
 
-    // The user already released this claim themselves while purchaseNft
-    // was still pending (handleReleaseClick) - preparedTx/status were
-    // reset immediately there, so don't overwrite that with whatever this
-    // now-stale continuation would otherwise show.
+    // User already released this claim while we were waiting - don't
+    // overwrite UI state they've already moved past.
     if (releasedWhilePendingRef.current) {
       releasedWhilePendingRef.current = false;
       if (transferSuccess) {
-        // Rare race: released here, but the wallet call succeeded anyway
-        // moments later. Metadata's already correct on-chain (that
-        // happens pre-transfer), so the buyer has a fully valid NFT - the
-        // only thing missing is this app's own performance -> serial
-        // link, which releasing just cleared. Best-effort finalize
-        // attempt rather than silently dropping it: the post-transfer
-        // route's own claim-match check decides whether this can safely
-        // proceed (already covered by existing test coverage) - if the
-        // claim really is gone, this fails cleanly server-side and the
-        // orphaned NFT is left for manual reconciliation to find, same
-        // accepted-gap category as a tab closing mid-flow. Not shown to
-        // the user - they've already moved on to a UI that says this was
-        // cancelled.
-        console.warn(
-          "Wallet transfer succeeded after the user had already released this claim - attempting best-effort finalize.",
-          { date, position, serial }
-        );
+        // Rare race: transfer succeeded moments after release. Not shown
+        // to the user - just a best-effort finalize attempt (the
+        // post-transfer route's own claim-match check decides if it's
+        // safe); if it can't land, the orphaned NFT is manual-reconciliation
+        // territory, same as a tab closing mid-flow.
+        console.warn("Wallet transfer succeeded after the claim was already released.", { date, position, serial });
         fetchStandardJson<boolean>(
           `/api/mint/${accountId}/${date}/${position}/${serial}`,
           { method: "POST" }
@@ -601,11 +506,8 @@ export const Performance = (): React.ReactNode => {
     if (!transferSuccess) {
       updateStatus(MintStatusDisplayText.TransferAborted);
       setPreparedTx(null);
-      // Best-effort cleanup only - status/preparedTx are already reset
-      // above, so a failure here doesn't strand the UI the way Finding 31's
-      // two spots did. Still wrapped so a failed cleanup attempt doesn't
-      // surface as an unhandled rejection; the claim (if any was still
-      // live) falls back to Finding 18's 15-minute sweep either way.
+      // Best-effort - UI's already reset above, so a failure here just
+      // falls back to the 15-minute sweep instead of stranding anything.
       try {
         await fetchStandardJson(
           `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
@@ -618,21 +520,13 @@ export const Performance = (): React.ReactNode => {
       } catch (err) {
         console.error("Cleanup abort request failed:", err);
       }
-      // See the mutatePerformance note below - same staleness fix, this is
-      // the wallet-rejected/failed-transfer exit instead of the success one.
       mutatePerformance();
       return;
     }
 
     updateStatus(MintStatusDisplayText.UpdatingMetadata);
-    // PUNCHLIST.md Finding 31: same missing-try/catch shape as the claim
-    // request above, but worse here - the buyer's wallet has already signed
-    // and paid by this point. An uncaught throw left the button stuck on
-    // "Updating metadata..." forever with no indication anything had gone
-    // wrong, let alone that the transfer itself had already succeeded.
-    // Treated the same as a modeled `false` result below, which already has
-    // the right copy for this exact situation ("Transfer complete, but
-    // failed to update metadata.").
+    // Same missing-try/catch risk as the claim fetch (Finding 31), worse
+    // here since the wallet's already signed and paid.
     let metadataUpdateSuccess = false;
     try {
       metadataUpdateSuccess = await fetchStandardJson<boolean>(
@@ -644,16 +538,8 @@ export const Performance = (): React.ReactNode => {
     }
 
     setPreparedTx(null);
-    // Found live 2026-08-17: after a real successful mint, the status text
-    // correctly updated ("Mint complete!"), but MintStatusIndicator and the
-    // mint button's own "Locked" fallback both stayed stuck showing the
-    // pre-mint state - they read `performance` (SWR-cached), and nothing
-    // told SWR the server-side lockedBy/serial had just changed underneath
-    // it. `preparedTx` going null is local React state, so it updates
-    // instantly; `performance` doesn't, until this. Revalidating here
-    // (success or failure - either way the server-side state just changed)
-    // is what makes "the rest of the view" catch up immediately instead of
-    // waiting on SWR's own polling/focus-revalidation to eventually notice.
+    // performance (SWR) doesn't update on its own just because preparedTx
+    // did - without this, MintStatusIndicator stayed stuck on stale data.
     mutatePerformance();
     updateStatus(
       metadataUpdateSuccess
@@ -724,15 +610,10 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (preparedTx) {
-      // Release is only offered once walletWaitTimedOut has fired - not
-      // from the first instant, so a normal-speed approval never even
-      // sees the option, and never during UpdatingMetadata (status moves
-      // off InitiatingTransfer before that, resetting walletWaitTimedOut
-      // to false in signAndFinalize's own finally block) - by then the
-      // transfer has already succeeded, a known fact, not a maybe, so
-      // there's nothing left to legitimately release. See
-      // handleReleaseClick's own comment for how this stays safe despite
-      // purchaseNft potentially still being in flight in this same tab.
+      // Gated on walletWaitTimedOut so a normal-speed approval never sees
+      // it, and it naturally excludes UpdatingMetadata (that flag's
+      // already reset by then) - by then the transfer's a known success,
+      // nothing left to release.
       const canRelease = walletWaitTimedOut;
       return (
         <div className="flex flex-col items-center gap-2">
@@ -768,14 +649,8 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (performance?.lockedBy) {
-      // Self-service release for your own claim - see PUNCHLIST.md Finding
-      // 52, which made this safe: releaseClaim now verifies real on-chain
-      // ownership before releasing anything, so a click here either
-      // genuinely frees the performance or (if the transfer actually went
-      // through in the interim) is refused and the revalidation below
-      // simply reveals the true "Already Minted" state instead - never a
-      // silent double-release. Only offered for your own lock; releasing
-      // someone else's claim is still admin-script territory.
+      // Only for your own lock - releasing someone else's is still
+      // admin-script territory.
       const isOwnLock = performance.lockedBy === accountId;
       return (
         <div className="flex flex-col items-center gap-2">
@@ -836,9 +711,6 @@ export const Performance = (): React.ReactNode => {
   const getStatusText = (): React.ReactNode => {
     if (performanceLoading) return null;
 
-    // Finding 50: while claiming/preparing, show the cycling progress
-    // message (+ a small spinner, since this step alone can run long) in
-    // place of the single static "Claiming performance..." text.
     if (status === MintStatusDisplayText.Claiming) {
       return (
         <div className="flex items-center gap-2 text-dol-yellow">
@@ -848,10 +720,6 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
-    // MintStatusDisplayText.ReadyToSign is never set anymore as of Finding
-    // 51 (signAndFinalize fires automatically, no in-between state to
-    // announce) - not excluded here for that reason anymore, it just never
-    // occurs.
     return status !== MintStatusDisplayText.None &&
       status !== MintStatusDisplayText.AlreadyMinted ? (
       <div className="text-dol-yellow">{status}</div>
