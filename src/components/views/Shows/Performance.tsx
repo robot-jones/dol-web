@@ -297,14 +297,48 @@ export const Performance = (): React.ReactNode => {
     }
 
     updateStatus(MintStatusDisplayText.Claiming);
-    const { serial, txBytes, lockedAt } = await fetchStandardJson<PreTransferResponse>(
-      `/api/mint/${accountId}/${date}/${position}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(attributes),
+
+    // PUNCHLIST.md Finding 31: this used to be a bare `await` with no
+    // try/catch. `fetchStandardJson` throws on any non-ok response (a real
+    // server error, not one of the modeled SerialErrorResponse cases the
+    // switch below handles), and status was already set to Claiming above -
+    // an uncaught throw here left the button disabled forever with no
+    // feedback and no way to retry short of a reload.
+    let response: PreTransferResponse;
+    try {
+      response = await fetchStandardJson<PreTransferResponse>(
+        `/api/mint/${accountId}/${date}/${position}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(attributes),
+        }
+      );
+    } catch (err) {
+      console.error("Claim request failed:", err);
+      updateStatus(MintStatusDisplayText.LockNotAcquired);
+      // We can't tell from here whether a claim actually landed
+      // server-side before the failure - release defensively, same as the
+      // known-failure cases below (the serial in the URL is unused by the
+      // abort route when there's no real claim to speak of). Swallow any
+      // error from the cleanup attempt itself so a failed abort can't
+      // re-stick the UI right after we just unstuck it.
+      try {
+        await fetchStandardJson(
+          `/api/mint/${accountId}/${date}/${position}/0/abort`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: "SYSTEM_FAILURE" }),
+          }
+        );
+      } catch (abortErr) {
+        console.error("Cleanup abort request failed:", abortErr);
       }
-    );
+      return;
+    }
+
+    const { serial, txBytes, lockedAt } = response;
 
     if (!txBytes) {
       // No client-side audit write here: whichever of these failed
@@ -372,22 +406,44 @@ export const Performance = (): React.ReactNode => {
     if (!transferSuccess) {
       updateStatus(MintStatusDisplayText.TransferAborted);
       setPreparedTx(null);
-      await fetchStandardJson(
-        `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "WALLET_REJECTED" }),
-        }
-      );
+      // Best-effort cleanup only - status/preparedTx are already reset
+      // above, so a failure here doesn't strand the UI the way Finding 31's
+      // two spots did. Still wrapped so a failed cleanup attempt doesn't
+      // surface as an unhandled rejection; the claim (if any was still
+      // live) falls back to Finding 18's 15-minute sweep either way.
+      try {
+        await fetchStandardJson(
+          `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: "WALLET_REJECTED" }),
+          }
+        );
+      } catch (err) {
+        console.error("Cleanup abort request failed:", err);
+      }
       return;
     }
 
     updateStatus(MintStatusDisplayText.UpdatingMetadata);
-    const metadataUpdateSuccess = await fetchStandardJson<boolean>(
-      `/api/mint/${accountId}/${date}/${position}/${serial}`,
-      { method: "POST" }
-    );
+    // PUNCHLIST.md Finding 31: same missing-try/catch shape as the claim
+    // request above, but worse here - the buyer's wallet has already signed
+    // and paid by this point. An uncaught throw left the button stuck on
+    // "Updating metadata..." forever with no indication anything had gone
+    // wrong, let alone that the transfer itself had already succeeded.
+    // Treated the same as a modeled `false` result below, which already has
+    // the right copy for this exact situation ("Transfer complete, but
+    // failed to update metadata.").
+    let metadataUpdateSuccess = false;
+    try {
+      metadataUpdateSuccess = await fetchStandardJson<boolean>(
+        `/api/mint/${accountId}/${date}/${position}/${serial}`,
+        { method: "POST" }
+      );
+    } catch (err) {
+      console.error("Metadata update request failed:", err);
+    }
 
     setPreparedTx(null);
     updateStatus(
