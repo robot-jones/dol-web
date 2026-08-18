@@ -40,8 +40,16 @@ export const StashItem = ({
   serial,
 }: StashItemProps): React.ReactNode => {
   const [attributes, setAttributes] = useState<PerformanceAttributes>({});
+  // Once a fetch has ever settled (succeeded or failed) once, later
+  // background revalidations (SWR's periodic/focus refetch) shouldn't flip
+  // the card back to the spinner - `metadataLoading` flips true again on a
+  // retry even while `metadata` is still undefined from the prior failure,
+  // which otherwise makes an already-known-broken item alternate between
+  // the error state and a spinner every refetch. Show the spinner only
+  // before the very first result ever arrives.
+  const [hasSettledOnce, setHasSettledOnce] = useState(false);
 
-  const { metadata, metadataLoading } = useNftMetadata(tokenId, serial);
+  const { metadata, metadataLoading, metadataError } = useNftMetadata(tokenId, serial);
 
   useEffect(() => {
     if (metadata?.attributes) {
@@ -49,8 +57,14 @@ export const StashItem = ({
     }
   }, [metadata]);
 
+  useEffect(() => {
+    if (metadata || metadataError) {
+      setHasSettledOnce(true);
+    }
+  }, [metadata, metadataError]);
+
   const getContent = (): React.ReactNode => {
-    if (metadataLoading) {
+    if (metadataLoading && !hasSettledOnce) {
       return <Loading sizeInPixels={60} />;
     }
 
