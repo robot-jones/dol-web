@@ -6,17 +6,11 @@ import { badRequest, StandardPayload, success } from "@/utils";
 
 // /api/audit/[accountId]
 //
-// The browser isn't a trustworthy witness to its own transactions - see
-// PUNCHLIST.md Finding 14. This used to write whatever `action`/`success`/
-// `context` a client sent straight to `dol-audit-logs`, which meant anyone
-// on the site (no exploit needed, just devtools) could plant a fabricated
-// entry under any accountId, including the treasury's own. Now: only the
-// two actions a client is ever legitimate to report get through at all,
-// only the context fields relevant to each are kept, and `success` is
-// re-derived from `verifyClientAction` (a real claim record + mirror node
-// check) rather than trusted from the request body. A request that doesn't
-// correspond to a real claim/association is rejected outright - not logged
-// as a fabricated failure, since it isn't a failed attempt at all.
+// The browser isn't a trustworthy witness to its own transactions - only
+// the two actions a client can legitimately report get through, only
+// their relevant context fields are kept, and `success` is re-derived via
+// verifyClientAction rather than trusted from the request body. A request
+// with no matching claim/association is rejected outright, not logged.
 
 const CLIENT_ACTIONS: ClientAction[] = ["NFT_PURCHASE", "TOKEN_ASSOCIATE"];
 const hederaIdPattern = /^\d+\.\d+\.\d+$/;

@@ -5,16 +5,10 @@ import { canMint } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial] (post-transfer endpoint)
 //
-// Everything slow/failure-prone (render, IPFS uploads, and the on-chain
-// metadata update itself) already happened pre-transfer - see the sibling
-// route. Deliberately moved the on-chain update there too, not just the
-// render/uploads: it's still a real Hedera transaction that can fail, and
-// leaving it post-transfer meant a failure here happened *after* the buyer's
-// wallet had already executed the transfer, with no way for Dynamo to tell
-// that apart from "never signed at all" - see PUNCHLIST.md for the finding.
-// This route is now just: verify the claim, and mark the performance sold.
-// Safe to retry: if `serial` is already set for this exact claim, treat it
-// as already-done rather than redo any work.
+// Everything slow/failure-prone already happened pre-transfer (see the
+// sibling route) - this is just: verify the claim, mark the performance
+// sold. Safe to retry: if `serial` is already set for this exact claim,
+// treat it as already-done.
 
 export type PostTransferParams = {
   accountId: string;

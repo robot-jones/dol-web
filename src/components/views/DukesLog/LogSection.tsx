@@ -42,10 +42,8 @@ export const LogSection = ({
     }
   }, [auditLogs]);
 
-  // Get the current page of logs
   const currentLogs = pages[currentPage] || [];
 
-  // Navigation functions
   const goToFirstPage = () => {
     setCurrentPage(0);
   };

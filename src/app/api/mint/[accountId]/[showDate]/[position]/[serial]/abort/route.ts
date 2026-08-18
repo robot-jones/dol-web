@@ -5,14 +5,10 @@ import { StandardPayload, success } from "@/utils";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial]/abort
 //
-// Releases a claim that never got paid for - e.g. the buyer's wallet
-// rejected or failed the transfer, or an explicit cancel. Delegates to
-// releaseClaim (see PUNCHLIST.md's "releaseClaim choke point", Finding
-// 25/27), which handles both the performance/serial release and unpinning
-// whatever was already published to IPFS - a stale/late call here is
-// always harmless, same as the underlying conditional writes always were.
-// This intentionally does NOT cover the tab-closes-mid-flow case - see
-// PUNCHLIST.md Phase 2's manual reconciliation script for that.
+// Releases a claim that never got paid for. Delegates to releaseClaim,
+// which also unpins whatever was already published to IPFS - a stale/late
+// call here is always harmless. Doesn't cover tab-closes-mid-flow - the
+// manual reconciliation script handles that.
 
 export type AbortTransferParams = {
   accountId: string;
@@ -21,14 +17,11 @@ export type AbortTransferParams = {
   serial: string;
 };
 
-// Performance.tsx calls this route from three different moments, and the
-// server has no other way to tell them apart - a client-declared `reason`
-// is genuinely needed here (unlike most of this app's routes, which
-// re-derive everything from server-side state; see Finding 14). Only the
-// reasons a browser could plausibly report are accepted; anything else
-// (including a missing/malformed value) falls back to SYSTEM_FAILURE, the
-// one reason that never counts toward Finding 27's future abandonment cap
-// - a bad client value should never accidentally penalize an account.
+// A client-declared `reason` is genuinely needed here (unlike most routes,
+// which re-derive everything server-side) since the server can't otherwise
+// tell why this was called. Anything not in this list (including missing/
+// malformed) falls back to SYSTEM_FAILURE, which never counts toward the
+// abandonment cap - a bad client value shouldn't penalize an account.
 const ClientReportableReasons: ReleaseReason[] = [
   "USER_CANCELLED",
   "WALLET_REJECTED",

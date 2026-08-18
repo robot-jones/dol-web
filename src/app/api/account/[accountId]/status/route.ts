@@ -5,14 +5,9 @@ import { StandardPayload, success } from "@/utils";
 
 // /api/account/[accountId]/status
 //
-// One round trip covering both the whitelist and blocklist checks - see
-// PUNCHLIST.md Finding 27. Both mint routes gate the same way server-side
-// via their own direct `getAccount` call (see `mint-gate.ts`), not this
-// endpoint - no reason for a server route to make an HTTP round trip to
-// itself. This endpoint exists for the client (`Performance.tsx`), which
-// can't read Dynamo directly and previously read `NEXT_PUBLIC_WHITE_LIST`
-// out of the bundle instead - the same `NEXT_PUBLIC_*`-as-gating footgun
-// Finding 2 already flagged elsewhere in this codebase.
+// One round trip covering whitelist + blocklist, for the client (which
+// can't read Dynamo directly). Mint routes gate server-side via their own
+// `getAccount` call (mint-gate.ts), not this endpoint.
 
 export type AccountStatusParams = {
   accountId: string;

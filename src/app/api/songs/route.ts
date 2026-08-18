@@ -5,10 +5,7 @@ import { getSongs } from "@erikmuir/dol-lib/server/api";
 
 // /api/songs
 
-export async function GET(
-  // req: NextRequest,
-  // { params }: { params: Promise<{}> }
-): Promise<NextResponse<StandardPayload<Song[] | string>>> {
+export async function GET(): Promise<NextResponse<StandardPayload<Song[] | string>>> {
   const songs: Song[] = [];
   try {
     const allSongs = await getSongs();

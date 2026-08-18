@@ -61,10 +61,7 @@ import { PageNote } from "@/components/common/PageNote";
 import { DolButton } from "@/components/common/DolButton";
 
 // Narrower than PreTransferResponse (whose txBytes is optional) - by the
-// time we ever set preparedTx, serial/txBytes are always populated
-// together. lockedAt carries over too, so the elapsed-lock note can show
-// immediately (see PUNCHLIST.md's immediate-timer follow-up) instead of
-// only appearing after a reload re-fetches performance.lockedAt from SWR.
+// time we ever set preparedTx, serial/txBytes are always populated together.
 type PreparedTransfer = {
   serial: number;
   txBytes: Uint8ArrayWrapper;
@@ -131,10 +128,8 @@ export const Performance = (): React.ReactNode => {
 
   const whitelisted = Boolean(accountStatus?.whitelisted);
   const blocked = Boolean(accountStatus?.blocked);
-  // See PUNCHLIST.md Finding 28 - live from dol-app-config (the soft kill
-  // switch) via SWR, not the old build-time NEXT_PUBLIC_MINT_ENABLED env
-  // var. Undefined while loading defaults to false, same fail-closed
-  // default the route side already uses.
+  // Undefined while loading defaults to false, same fail-closed default
+  // the route side uses.
   const mintEnabled = Boolean(appConfigStatus?.mintEnabled);
   const collectionMintStatus = appConfigStatus?.collectionMintStatus;
 
@@ -404,14 +399,8 @@ export const Performance = (): React.ReactNode => {
     const { serial, txBytes, lockedAt } = response;
 
     if (!txBytes) {
-      // No client-side audit write here: whichever of these failed
-      // (claim, or a claim that got released again after a metadata
-      // publish failure) already has its own server-side audit entry -
-      // PERFORMANCE_CLAIM/SERIAL_CLAIM/NFT_METADATA_PUBLISH, all
-      // success: false, keyed to this account. By the time we'd report
-      // an NFT_PURCHASE failure here, there's no live claim left to
-      // verify it against anyway (see PUNCHLIST.md Finding 14) - it
-      // would just be rejected.
+      // No client-side audit write here - whichever of these failed
+      // already has its own server-side audit entry.
       switch (serial) {
         case SerialErrorResponse.LOCK_NOT_ACQUIRED:
           updateStatus(MintStatusDisplayText.LockNotAcquired);
@@ -576,16 +565,9 @@ export const Performance = (): React.ReactNode => {
     );
   };
 
-  // Elapsed time, not a precise countdown - the sweep that releases stuck
-  // claims runs on its own schedule (currently every 5m, releasing
-  // anything over 15m old), so an exact "frees up in Xm" promise would
-  // drift out of sync and could visibly overshoot. Keep this note's "~15m"
-  // in sync with dol-bot's reconcile-claims.js EXPIRY_MINUTES if that ever
-  // changes - see PUNCHLIST.md Finding 18. Shared between the "just
-  // claimed it myself" (preparedTx) and "someone/something else has it
-  // locked" (performance.lockedBy) states, so it shows immediately after a
-  // successful claim rather than only after a reload re-fetches
-  // performance.lockedAt - see PUNCHLIST.md's immediate-timer follow-up.
+  // Elapsed time, not a countdown - the sweep runs on its own schedule
+  // (~15m), so an exact "frees up in Xm" promise could visibly overshoot.
+  // Keep "~15m" in sync with reconcile-claims.js's EXPIRY_MINUTES.
   const getLockedForNote = (lockedAt?: number): React.ReactNode => {
     if (!lockedAt) return null;
     return (
@@ -672,10 +654,8 @@ export const Performance = (): React.ReactNode => {
       );
     }
     if (blocked) {
-      // See PUNCHLIST.md Finding 27: what a blocked user is told beyond
-      // this is still an open UX question (no "request review" channel
-      // exists yet) - kept deliberately minimal for now rather than
-      // building that flow speculatively.
+      // What a blocked user is told beyond this is still an open
+      // question (no "request review" channel exists yet).
       return (
         <DolButton color="gray" roundedFull disabled>Minting Unavailable</DolButton>
       );
@@ -739,12 +719,9 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
-    // Ticket Stub early access only reads true pre-launch - a whitelisted
-    // account isn't "early" if the sale has already been paused, ended, or
-    // sold out, even though today's canMint gate (Finding 27) doesn't
-    // actually distinguish those cases server-side. Worth a look separately
-    // - this note describes the honest state, not necessarily everything
-    // the server would currently let a whitelisted account do.
+    // "Early access" only reads true pre-launch - not if the sale's since
+    // been paused/ended/sold out, even though canMint doesn't distinguish
+    // those cases server-side.
     if (collectionMintStatus === CollectionMintStatus.PRE && whitelisted) {
       return (
         <PageNote color="green" className="text-center">
