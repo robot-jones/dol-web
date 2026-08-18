@@ -103,6 +103,12 @@ export const DolButton = ({
   );
 
   return href
-    ? <Link href={disabled ? "#" : href} className={mergedClassName} onClick={onClick}>{children}</Link>
+    ? <Link
+        href={href}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : undefined}
+        className={twMerge(mergedClassName, disabled ? "pointer-events-none" : "")}
+        onClick={onClick}
+      >{children}</Link>
     : <button type="button" className={mergedClassName} onClick={onClick} disabled={disabled}>{children}</button>;
 };

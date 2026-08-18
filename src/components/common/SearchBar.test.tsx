@@ -9,6 +9,19 @@ describe("SearchBar", () => {
     expect(input).toHaveFocus();
   });
 
+  it("does not re-steal focus on re-render (Finding 33)", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <SearchBar value="" onChange={onChange} placeholder="Find" />
+    );
+    const input = screen.getByRole("textbox", { name: "Find" });
+    input.blur();
+    expect(input).not.toHaveFocus();
+
+    rerender(<SearchBar value="a" onChange={onChange} placeholder="Find" />);
+    expect(input).not.toHaveFocus();
+  });
+
   it("calls onChange when typing", () => {
     const onChange = vi.fn();
     render(<SearchBar value="" onChange={onChange} placeholder="Search" />);

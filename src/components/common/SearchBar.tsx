@@ -23,7 +23,7 @@ export const SearchBar = ({
     if (inputRef.current) {
       inputRef.current.focus();
     }
-  });
+  }, []);
 
   return (
     <div
