@@ -22,14 +22,10 @@ export const Header = () => {
     }
   }, [router]);
 
-  // Publish the header's real rendered height as a CSS var so anything
-  // that needs to sit flush against it (main's top margin,
-  // HelpingFriendlyBookLayout's FilterTypePicker) can read the actual
-  // value instead of a hardcoded px guess that goes stale the next time
-  // this header's contents change height - a ResizeObserver rather than a
-  // one-time measurement because that height is genuinely dynamic (nav
-  // wrapping on narrow viewports being the main driver), not just a
-  // mount-time constant.
+  // Publishes the header's real rendered height as a CSS var so anything
+  // sitting flush against it doesn't need a hardcoded px guess. A
+  // ResizeObserver, not a one-time measurement, since height changes
+  // dynamically (nav wrapping on narrow viewports).
   useEffect(() => {
     const header = headerRef.current;
     if (!header) return undefined;

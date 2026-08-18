@@ -1,13 +1,8 @@
 import { DolColor } from "@erikmuir/dol-lib/types";
 
-// Moved here from dol-lib 2026-08-08 (PUNCHLIST.md Phase 5) - this is
-// presentation logic specific to dol-web's Tailwind setup, and dol-lib
-// isn't in dol-web's Tailwind content-scan path anyway, so keeping it in
-// dol-lib meant the resulting classes could never be scanned directly no
-// matter how they were built. Living here, plus writing every class name
-// below as a literal string (not template-interpolated), means Tailwind's
-// scanner picks them up on its own - no `safelist` needed in
-// tailwind.config.ts.
+// Lives here (not dol-lib, outside Tailwind's content-scan path) with
+// every class name written as a literal string so Tailwind's scanner
+// picks them up on its own - no `safelist` needed.
 
 export enum TwColorClassPrefix {
   Background = "bg-",
@@ -127,12 +122,10 @@ const WEBKIT_CLASSES: Partial<Record<TwColorClassPercentage, ClassesByColor>> = 
 };
 
 /**
- * Returns a literal Tailwind utility class for one of the app's `dol-*`
- * brand colors. Every possible return value is a hand-written literal
- * string somewhere above (see `CLASSES`/`WEBKIT_CLASSES`) - if this throws,
- * add the missing [prefix][percentage] (and color) entry rather than
- * reaching for string interpolation, or the class silently won't exist in
- * the built CSS.
+ * Returns a literal Tailwind utility class for a `dol-*` brand color. If
+ * this throws, add the missing [prefix][percentage] entry to
+ * CLASSES/WEBKIT_CLASSES - don't reach for string interpolation, or the
+ * class silently won't exist in the built CSS.
  */
 export const getTwDolColor = (
   color: DolColor,

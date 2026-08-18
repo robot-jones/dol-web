@@ -10,24 +10,14 @@ import { canMint } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
 //
-// Claims the performance, then does the slow/failure-prone work (render + 2
-// IPFS uploads + the on-chain metadata update) before any money moves - see
-// PUNCHLIST.md Finding 1/Phase 2. The on-chain update used to happen
-// post-transfer, but that left a gap: if it failed after the buyer's wallet
-// had already executed the transfer, Dynamo had no way to distinguish "never
-// signed" from "signed and transferred, but the metadata tx failed" - both
-// look like `lockedBy` set with no `serial`, so Finding 18's stuck-claim
-// sweep would release the performance for someone else to claim again even
-// though a real buyer already owned that serial. Doing the update here means
-// any failure in this whole chain - render, either IPFS upload, or the
-// on-chain update itself - is still a pre-payment failure: the claim is
-// released immediately and no money has moved yet.
+// Claims the performance, then does the slow/failure-prone work (render, 2
+// IPFS uploads, the on-chain metadata update) before any money moves -
+// any failure in that chain is still a pre-payment failure, claim
+// released immediately. This used to run post-transfer, which couldn't
+// tell "never signed" apart from "signed, but the metadata tx failed."
 //
-// Vercel's default function timeout (10s) isn't enough for this route on a
-// cold start: extracting @sparticuz/chromium's binary, launching it,
-// rendering, and two sequential Pinata uploads routinely exceeds that on
-// its own - see PUNCHLIST.md Finding 16's follow-up. 60s is Vercel's cap on
-// the Hobby tier; comfortably covers a cold run without over-provisioning.
+// 60s (Vercel's Hobby-tier cap) - a cold start (chromium extraction,
+// render, two sequential Pinata uploads) routinely exceeds the 10s default.
 export const maxDuration = 60;
 
 export type PreTransferParams = {
@@ -83,12 +73,9 @@ export async function POST(
   );
 
   if (!imageCid || !metadataCid) {
-    // publishNftMetadata never throws - it always returns whatever it
-    // actually managed to publish, even after an unexpected error (see
-    // PUNCHLIST.md Finding 25). If the image half made it up before
-    // metadata failed, persist that CID on its own so releaseClaim can
-    // still find and unpin it below - otherwise it'd be silently orphaned
-    // on Pinata forever.
+    // publishNftMetadata never throws - always returns whatever it managed
+    // to publish. Persist a lone imageCid so releaseClaim can still find
+    // and unpin it, rather than it being silently orphaned on Pinata.
     if (imageCid) {
       const setImageCidResult = await setImageCid(showDate, parsedPosition, accountId, imageCid);
       if (!setImageCidResult.success) {
@@ -128,21 +115,16 @@ export async function POST(
     .addNftTransfer(hfbCollectionId, serial, treasuryAccount, accountId)
     .freezeWith(client);
   const signedTx = await transaction.signWithOperator(client);
-  // Serialized explicitly as { type: "Buffer", data: [...] } (matching
-  // dol-lib's Uint8ArrayWrapper) rather than sent as a raw Uint8Array -
-  // JSON.stringify on a bare Uint8Array produces {"0":n,"1":n,...}, not an
-  // array, which the client's `new Uint8Array(txBytes.data)` can't
-  // reconstruct (txBytes.data is undefined -> an empty transaction, which
-  // the SDK then fails to deserialize client-side). See PUNCHLIST.md
-  // Finding 17.
+  // Explicit { type: "Buffer", data: [...] } shape, not a raw Uint8Array -
+  // JSON.stringify on a bare Uint8Array produces {"0":n,"1":n,...}, which
+  // the client's `new Uint8Array(txBytes.data)` can't reconstruct.
   const txBytes: Uint8ArrayWrapper = {
     type: "Buffer",
     data: Array.from(signedTx.toBytes()),
   };
 
-  // So the client can show "Locked for mm:ss" immediately once claimed,
-  // without waiting on a page reload to pick up the server-side value -
-  // see PUNCHLIST.md's two-click flow item, the immediate-timer follow-up.
+  // So the client can show "Locked for mm:ss" immediately, without
+  // waiting on a reload to pick up the server-side value.
   const claimedPerformance = await getPerformance(showDate, parsedPosition);
 
   return success({ serial, txBytes, lockedAt: claimedPerformance?.lockedAt });
