@@ -61,7 +61,7 @@ const NavTab = ({
     <Link
       href={href}
       className={twMerge(
-        "flex flex-col items-center justify-center w-1/4 relative",
+        "flex flex-col items-center justify-center flex-1 relative",
         "text-md text-center h-16 cursor-pointer tracking-wide",
         "group"
       )}
