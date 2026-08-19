@@ -47,6 +47,7 @@ export const LinkAttribute = ({
       return (
         <a
           target="_blank"
+          rel="noopener noreferrer"
           href={href}
           className={twMerge(linkStyles, "bg-white")}
         >
@@ -65,6 +66,7 @@ export const LinkAttribute = ({
       return (
         <a
           target="_blank"
+          rel="noopener noreferrer"
           href={href}
           className={twMerge(linkStyles, "bg-gray-light")}
         >
@@ -82,6 +84,7 @@ export const LinkAttribute = ({
     return (
       <a
         target="_blank"
+        rel="noopener noreferrer"
         href={href}
         className={getTwDolColor(textColor, TwColorClassPrefix.Text)}
       >

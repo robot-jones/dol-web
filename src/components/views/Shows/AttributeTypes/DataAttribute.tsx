@@ -41,7 +41,7 @@ export const DataAttribute = ({
 
     if (href) {
       return (
-        <a href={href} className="hover:text-dol-yellow" target="_blank">
+        <a href={href} className="hover:text-dol-yellow" target="_blank" rel="noopener noreferrer">
           {sanitizedText}
         </a>
       );

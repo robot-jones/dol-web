@@ -14,6 +14,8 @@ export const DiscordLink = ({
       <a
         className="text-[#5865f2] hover:scale-125 duration-500"
         href="https://discord.gg/WpaDkMxEJ9"
+        target="_blank"
+        rel="noopener noreferrer"
         title="Duke of Lizards Discord"
         aria-label="Duke of Lizards Discord"
       >
