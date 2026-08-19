@@ -25,7 +25,7 @@ export default function DukesLog(): React.ReactElement {
   );
 
   return (
-    <div className="w-full max-w-[1024px] mx-auto">
+    <div className="w-full max-w-5xl mx-auto">
       <div className="text-4xl uppercase tracking-[4px] text-center my-8">
         Audit Logs
       </div>

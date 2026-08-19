@@ -765,7 +765,7 @@ export const Performance = (): React.ReactNode => {
     .join("\n");
 
   return (
-    <div className="w-[320px] md:w-[500px] lg:w-[680px] mt-4 mx-auto flex flex-col">
+    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
         {getPageNote()}
         <MintStatusIndicator

@@ -52,7 +52,7 @@ export const Song = (): React.ReactElement => {
 
   return (
     <div className={twMerge(
-      "w-[320px] md:w-[500px] mx-auto",
+      "w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] mx-auto",
       "flex flex-col items-center gap-6",
       )}>
       <div>

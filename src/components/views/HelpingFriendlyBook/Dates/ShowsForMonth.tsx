@@ -16,7 +16,7 @@ export const ShowsForMonth = ({
   const dateParts = new Date().toLocaleDateString("en-US", options).split("/");
   const today = `${dateParts[2]}-${dateParts[0]}-${dateParts[1]}`;
   return (
-    <div className="w-[320px] md:w-[500px] lg:w-[680px] mx-auto flex flex-col items-center justify-center gap-4">
+    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mx-auto flex flex-col items-center justify-center gap-4">
       <div className="text-2xl text-dol-yellow pb-4 text-center">
         {sanitizeText(header)}
       </div>

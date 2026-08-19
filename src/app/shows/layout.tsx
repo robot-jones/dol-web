@@ -6,7 +6,7 @@ export default function SetlistsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="w-[320px] md:w-[672px] lg:w-[900px] xl:w-[1024px] flex flex-col">
+    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] xl:max-w-[900px] flex flex-col">
       {children}
     </div>
   );

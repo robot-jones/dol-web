@@ -32,7 +32,7 @@ export const Date = ({
   jumpTo,
 }: DateProps): React.ReactElement => {
   return (
-    <div className="w-80 w-[320px] md:w-[500px] mx-auto flex flex-col items-center justify-center">
+    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] mx-auto flex flex-col items-center justify-center">
       <div className="text-2xl text-dol-yellow pb-4 text-center">
         {sanitizeText(name)}
       </div>
