@@ -1,7 +1,7 @@
-export default function HelpingFriendlyBookLocationsLayout({
+export default function HelpingFriendlyBookSongsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (<div>{children}</div>);
+  return <>{children}</>;
 }

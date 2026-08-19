@@ -26,7 +26,7 @@ export const Songs = (): React.ReactElement => {
 
   const getContent = () => {
     if (searchTerm.length < 3) {
-      return <div className="text-center text-gray-dark">Please enter at least 3 characters</div>;
+      return <div className="text-center text-gray-medium">Please enter at least 3 characters</div>;
     }
 
     if (songsLoading) {
@@ -34,7 +34,7 @@ export const Songs = (): React.ReactElement => {
     }
 
     if (searchResults.length === 0) {
-      return <div className="text-center text-gray-dark">No results found</div>;
+      return <div className="text-center text-gray-medium">No results found</div>;
     }
 
     return searchResults.map((song, index) => {
