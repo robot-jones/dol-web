@@ -99,6 +99,7 @@ export const Performance = (): React.ReactNode => {
   const [subject, setSubject] = useState<Subject | undefined>(Subject.Lizard);
   const [attributes, setAttributes] = useState<PerformanceAttributes>({});
   const [status, setStatus] = useState<MintStatusDisplayText>(MintStatusDisplayText.None);
+  const [associateError, setAssociateError] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
@@ -307,9 +308,16 @@ export const Performance = (): React.ReactNode => {
   };
 
   const handleAssociateClick = async () => {
-    const success = await walletInterface?.associateToken(hfbCollectionId);
-    if (success) {
-      mutateIsAssociated(true);
+    setAssociateError(false);
+    try {
+      const success = await walletInterface?.associateToken(hfbCollectionId);
+      if (success) {
+        mutateIsAssociated(true);
+      } else {
+        setAssociateError(true);
+      }
+    } catch {
+      setAssociateError(true);
     }
   };
 
@@ -594,7 +602,14 @@ export const Performance = (): React.ReactNode => {
     }
     if (!isAssociated) {
       return (
-        <DolButton color="blue" roundedFull onClick={handleAssociateClick}>Associate the token</DolButton>
+        <div className="flex flex-col items-center gap-2">
+          <DolButton color="blue" roundedFull onClick={handleAssociateClick}>Associate the token</DolButton>
+          {associateError && (
+            <div className="text-xs text-dol-red text-center">
+              Failed to associate token. Please try again.
+            </div>
+          )}
+        </div>
       );
     }
     if (preparedTx) {
