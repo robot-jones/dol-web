@@ -402,3 +402,18 @@ audio {
    */
   --header-height: 174px;
 }
+
+/*
+ * Respect a user's OS-level reduced-motion preference for the app's two
+ * infinite/looping animations - AnimatedDonut's spin (the loading
+ * indicator used throughout the app) and the randomize icon's
+ * color-cycle. Comes after @tailwind utilities above, so plain source
+ * order is enough to win over the base .animate-* rule - no !important
+ * needed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-color-cycle {
+    animation: none;
+  }
+}
