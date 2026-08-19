@@ -41,7 +41,15 @@ export const Date = ({
         return (
           <div
             key={target}
+            role="button"
+            tabIndex={0}
             onClick={() => jumpTo(dateType, target)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                jumpTo(dateType, target);
+              }
+            }}
             className={twMerge(
               "py-4 px-2 w-full",
               "cursor-pointer hover:bg-gray-dark",
