@@ -25,7 +25,15 @@ export const Location = ({
         return (
           <div
             key={target}
+            role="button"
+            tabIndex={0}
             onClick={() => jumpTo(locationType, target)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                jumpTo(locationType, target);
+              }
+            }}
             className={twMerge(
               "py-4 px-2 w-full",
               "cursor-pointer hover:bg-gray-dark",
