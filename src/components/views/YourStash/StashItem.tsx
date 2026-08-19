@@ -104,20 +104,15 @@ export const StashItem = ({
   };
 
   const { date, position } = attributes;
-  const href =
-    date && position
-      ? `/shows/${attributes.date}/${attributes.position}`
-      : "#";
+  const isReady = Boolean(date && position);
+  const cardClassName = twMerge(
+    "w-full max-w-[320px] min-h-[140px]",
+    "text-center text-balance",
+    isReady ? "hover:bg-dol-blue/10 duration-500" : ""
+  );
 
-  return (
-    <Link
-      href={href}
-      className={twMerge(
-        "w-full max-w-[320px] min-h-[140px]",
-        "text-center text-balance",
-        "hover:bg-dol-blue/10 duration-500"
-      )}
-    >
+  const cardContent = (
+    <>
       <div
         className={twMerge(
           "w-full text-xs py-2",
@@ -137,6 +132,17 @@ export const StashItem = ({
       >
         {getContent()}
       </div>
+    </>
+  );
+
+  // Genuinely inert until date/position resolve from metadata - a
+  // Link with href="#" still "works" (navigates to page-top), which reads
+  // as a broken click during that window rather than not-yet-clickable.
+  return isReady ? (
+    <Link href={`/shows/${date}/${position}`} className={cardClassName}>
+      {cardContent}
     </Link>
+  ) : (
+    <div className={cardClassName}>{cardContent}</div>
   );
 };
