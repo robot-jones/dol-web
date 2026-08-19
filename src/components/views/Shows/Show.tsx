@@ -82,7 +82,7 @@ export const Show = (): React.ReactElement => {
   };
 
   return (
-    <div className="w-[320px] md:w-[500px] lg:w-[680px] mx-auto flex flex-col items-center mt-8">
+    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mx-auto flex flex-col items-center mt-8">
       {getShowHeader()}
       <div className="flex flex-col items-center gap-8 pb-16 w-full">
         {getDistinctSets().map((set) => {

@@ -7,7 +7,7 @@ import { twMerge } from "tailwind-merge";
 export const Nav = (): React.ReactElement => {
   const pathname = usePathname();
   return (
-    <div className="w-full mx-auto max-w-[1024px]">
+    <div className="w-full mx-auto max-w-5xl">
       <div className="flex justify-start items-center gap-4">
         <NavTab
           name="Home"

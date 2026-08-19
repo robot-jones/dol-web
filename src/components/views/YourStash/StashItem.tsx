@@ -16,7 +16,7 @@ export const AddToStashItem = (): React.ReactNode => {
     <Link
       href="/helping-friendly-book/songs"
       className={twMerge(
-        "flex items-center justify-center gap-4 w-[320px] py-4",
+        "flex items-center justify-center gap-4 w-full max-w-[320px] py-4",
         "text-dol-light/50 hover:text-dol-light duration-500",
         "border border-gray-dark rounded-xl overflow-hidden",
         "hover:bg-gray-dark"
@@ -113,7 +113,7 @@ export const StashItem = ({
     <Link
       href={href}
       className={twMerge(
-        "w-[320px] min-h-[140px]",
+        "w-full max-w-[320px] min-h-[140px]",
         "text-center text-balance",
         "hover:bg-dol-blue/10 duration-500"
       )}
