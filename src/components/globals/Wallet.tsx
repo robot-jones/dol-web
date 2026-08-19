@@ -7,10 +7,12 @@ import Modal from "./Modal";
 export const Wallet = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const [open, setOpen] = useState(false);
+  const [associateError, setAssociateError] = useState(false);
   const { accountId, walletInterface } = useWalletInterface();
   const { isAssociated, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
 
   const handleAccountClick = async () => {
+    setAssociateError(false);
     setOpen(!open);
   };
 
@@ -25,11 +27,20 @@ export const Wallet = () => {
   }, [walletInterface]);
 
   const handleAssociateClick = useCallback(async () => {
-    const success = await walletInterface?.associateToken(hfbCollectionId);
-    if (success) {
-      mutateIsAssociated(true);
+    setAssociateError(false);
+    try {
+      const success = await walletInterface?.associateToken(hfbCollectionId);
+      if (success) {
+        mutateIsAssociated(true);
+        setOpen(false);
+      } else {
+        // Stay open on failure - closing here would hide the error in the
+        // same tick it appears, same bug this is fixing.
+        setAssociateError(true);
+      }
+    } catch {
+      setAssociateError(true);
     }
-    setOpen(false);
   }, [walletInterface, mutateIsAssociated, hfbCollectionId]);
 
   const handleLinkClick = useCallback(() => {
@@ -59,7 +70,14 @@ export const Wallet = () => {
             <DolButton color="green" fullWidth onClick={handleConnectClick}>Connect Wallet</DolButton>
           )}
           {accountId && !isAssociated && (
-            <DolButton color="green" fullWidth onClick={handleAssociateClick}>Associate Token</DolButton>
+            <>
+              <DolButton color="green" fullWidth onClick={handleAssociateClick}>Associate Token</DolButton>
+              {associateError && (
+                <div className="text-xs text-dol-red text-center">
+                  Failed to associate token. Please try again.
+                </div>
+              )}
+            </>
           )}
           <DolButton color="blue" fullWidth href="/terms-of-service" onClick={handleLinkClick}>Terms of Service</DolButton>
           <DolButton color="yellow" fullWidth href="/privacy-policy" onClick={handleLinkClick}>Privacy Policy</DolButton>
