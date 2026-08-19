@@ -55,7 +55,7 @@ export const Header = () => {
           className="flex items-center gap-2 cursor-default"
           title="Can you still have fun?"
         >
-          <a href="https://wilson.com">
+          <a href="https://wilson.com" target="_blank" rel="noopener noreferrer">
             <Shapes sizeInPixels={20} bounceOnHover />
           </a>
           <GoBack handleClick={handleBack} />

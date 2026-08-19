@@ -36,6 +36,7 @@ export const LinksAttribute = ({
         {dolLink && (
           <a
             target="_blank"
+            rel="noopener noreferrer"
             href={dolLink}
             className={twMerge(linkStyles, "bg-dol-light")}
           >
@@ -51,6 +52,7 @@ export const LinksAttribute = ({
         {phishNetLink && (
           <a
             target="_blank"
+            rel="noopener noreferrer"
             href={phishNetLink}
             className={twMerge(linkStyles, "bg-white")}
           >
@@ -65,6 +67,7 @@ export const LinksAttribute = ({
         {phishInLink && (
           <a
             target="_blank"
+            rel="noopener noreferrer"
             href={phishInLink}
             className={twMerge(linkStyles, "bg-gray-light")}
           >
