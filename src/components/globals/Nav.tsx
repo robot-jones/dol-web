@@ -16,12 +16,12 @@ export const Nav = (): React.ReactElement => {
           isCurrentTab={pathname === "/"}
         />
         <NavTab
-          name="Helping Friendly Book"
-          href="/helping-friendly-book/dates"
+          name="The Book"
+          href="/book/dates"
           color="bg-dol-green"
           isFaulty
           isCurrentTab={
-            pathname.startsWith("/helping-friendly-book") ||
+            pathname.startsWith("/book") ||
             pathname.startsWith("/shows")
           }
         />
