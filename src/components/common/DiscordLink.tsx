@@ -15,6 +15,7 @@ export const DiscordLink = ({
         className="text-[#5865f2] hover:scale-125 duration-500"
         href="https://discord.gg/WpaDkMxEJ9"
         title="Duke of Lizards Discord"
+        aria-label="Duke of Lizards Discord"
       >
         <FaDiscord size={sizeInPixels} />
       </a>

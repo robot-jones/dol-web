@@ -289,7 +289,13 @@ export const Performance = (): React.ReactNode => {
   };
 
   const handleRandomizeKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") randomizeAttributes();
+    // Now that ImageAttributes' randomize control has role="button"
+    // (Finding 39), Space should activate it too, matching a native
+    // <button>'s keyboard contract, not just Enter.
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      randomizeAttributes();
+    }
   }, []);
 
   const handleRandomizeClick = useCallback(() => {
