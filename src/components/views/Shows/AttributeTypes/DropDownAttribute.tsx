@@ -45,14 +45,15 @@ export const DropDownAttribute = ({
       )}
     >
       {label && (
-        <div
+        <label
+          htmlFor={id}
           className={twMerge(
-            "text-[10px] uppercase pb-1",
+            "block text-[10px] uppercase pb-1",
             getLabelTextColorClass(attributeColor)
           )}
         >
           {label}
-        </div>
+        </label>
       )}
       <div
         className={twMerge(
