@@ -357,7 +357,6 @@ export const Performance = (): React.ReactNode => {
 
   const updateStatus = (newStatus: MintStatusDisplayText) => {
     setStatus(newStatus);
-    console.log(newStatus);
   };
 
   // signAndFinalize fires automatically once this resolves (Finding 51) -
