@@ -30,8 +30,16 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key="eras"
+        role="button"
+        tabIndex={0}
         className="cursor-pointer"
         onClick={() => router.push(pathname)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push(pathname);
+          }
+        }}
       >
         Eras
       </div>
@@ -43,8 +51,16 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key={`era-${era}`}
+        role="button"
+        tabIndex={0}
         className="cursor-pointer"
         onClick={() => jumpTo("era", era)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            jumpTo("era", era);
+          }
+        }}
       >
         {sanitizeText(era)}
       </div>
@@ -56,7 +72,15 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key={`year-${year}`}
+        role="button"
+        tabIndex={0}
         onClick={() => jumpTo("year", year)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            jumpTo("year", year);
+          }
+        }}
         className="cursor-pointer"
       >
         {sanitizeText(year)}
