@@ -88,6 +88,8 @@ export const ImageAttributes = ({
             "animate-color-cycle",
           )}
           title="Randomize"
+          role="button"
+          aria-label="Randomize"
           onClick={handleRandomizeClick}
           onKeyDown={handleRandomizeKeyDown}
           tabIndex={0}

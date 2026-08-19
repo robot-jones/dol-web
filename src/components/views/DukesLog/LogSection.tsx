@@ -191,6 +191,7 @@ export const LogSection = ({
                 onClick={goToFirstPage}
                 disabled={isFirstPage}
                 title="First Page"
+                aria-label="First Page"
                 className={twMerge(
                   "bg-transparent duration-500",
                   isFirstPage ? "text-gray-medium" : "text-dol-light",
@@ -203,6 +204,7 @@ export const LogSection = ({
                 onClick={goToPrevPage}
                 disabled={isFirstPage}
                 title="Previous Page"
+                aria-label="Previous Page"
                 className={twMerge(
                   "bg-transparent duration-500",
                   isFirstPage ? "text-gray-medium" : "text-dol-light",
@@ -220,6 +222,7 @@ export const LogSection = ({
                 onClick={goToNextPage}
                 disabled={isLastPage}
                 title="Next Page"
+                aria-label="Next Page"
                 className={twMerge(
                   "bg-transparent duration-500",
                   isLastPage ? "text-gray-medium" : "text-dol-light",
@@ -232,6 +235,7 @@ export const LogSection = ({
                 onClick={goToLastPage}
                 disabled={isLastPage}
                 title="Last Page"
+                aria-label="Last Page"
                 className={twMerge(
                   "bg-transparent duration-500",
                   isLastPage ? "text-gray-medium" : "text-dol-light",
