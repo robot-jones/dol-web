@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { DolButton } from "@/components/common/DolButton";
 
 export default function Error({
   error,
@@ -16,7 +17,7 @@ export default function Error({
   return (
     <div className="flex flex-col gap-4 items-center mt-16">
       <div className="text-xl">Something went wrong!</div>
-      <button type="button" onClick={reset}>Try again</button>
+      <DolButton color="blue" roundedFull onClick={reset}>Try again</DolButton>
     </div>
   );
 }
