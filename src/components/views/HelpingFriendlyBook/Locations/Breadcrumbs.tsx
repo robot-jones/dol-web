@@ -33,8 +33,16 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key="planet-Earth"
+        role="button"
+        tabIndex={0}
         className="cursor-pointer"
         onClick={() => router.push(pathname)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push(pathname);
+          }
+        }}
       >
         Earth
       </div>
@@ -46,8 +54,16 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key={`country-${country}`}
+        role="button"
+        tabIndex={0}
         className="cursor-pointer"
         onClick={() => jumpTo("country", country)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            jumpTo("country", country);
+          }
+        }}
       >
         {sanitizeText(country)}
       </div>
@@ -59,7 +75,15 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key={`state-${state}`}
+        role="button"
+        tabIndex={0}
         onClick={() => jumpTo("state", state)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            jumpTo("state", state);
+          }
+        }}
         className="cursor-pointer"
       >
         {sanitizeText(getStateName(state))}
@@ -72,7 +96,15 @@ export const Breadcrumbs = ({
     breadcrumbs.push(
       <div
         key={`city-${city}`}
+        role="button"
+        tabIndex={0}
         onClick={() => jumpTo("city", city)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            jumpTo("city", city);
+          }
+        }}
         className="cursor-pointer"
       >
         {sanitizeText(city)}
