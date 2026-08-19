@@ -49,6 +49,7 @@ export const Wallet = () => {
         id="wallet"
         show={open}
         onClose={handleCancelClick}
+        ariaLabel="Wallet menu"
         className="justify-end items-start pt-10"
       >
         <div className="flex flex-col gap-3 w-48">
