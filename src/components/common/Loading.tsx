@@ -17,10 +17,12 @@ export const Loading = ({
   return (
     <>
       <div
+        role="status"
         className="absolute"
         style={{ top: `calc(50% - ${half}px)`, left: `calc(50% - ${half}px)` }}
       >
         <AnimatedDonut sizeInPixels={sizeInPixels} />
+        <span className="sr-only">Loading...</span>
       </div>
       {showLyric && (
         <div
