@@ -172,8 +172,17 @@ export const LogSection = ({
   return (
     <div className="rounded w-full max-h-[400px] overflow-hidden border border-gray-dark-2">
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         className="flex justify-between items-center cursor-pointer p-4 bg-gray-dark"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
       >
         <h2 className="text-xl font-bold">{title}</h2>
         <span className="text-gray-light">
