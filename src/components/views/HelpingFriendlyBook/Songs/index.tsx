@@ -41,7 +41,7 @@ export const Songs = (): React.ReactElement => {
       return (
         <Link
           key={index}
-          href={`/helping-friendly-book/songs/${song.slug}`}
+          href={`/book/songs/${song.slug}`}
           className={twMerge(
             "flex flex-col p-2",
             "border-b border-gray-dark",

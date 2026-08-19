@@ -16,13 +16,13 @@ export const NoPages = (): React.ReactNode => (
     </div>
     <div>&nbsp;</div>
     <div className="flex items-center justify-center gap-4">
-      <Link href="/helping-friendly-book/songs" className={linkBtn}>
+      <Link href="/book/songs" className={linkBtn}>
         Browse By Song
       </Link>
-      <Link href="/helping-friendly-book/dates" className={linkBtn}>
+      <Link href="/book/dates" className={linkBtn}>
         Browse by Date
       </Link>
-      <Link href="/helping-friendly-book/locations" className={linkBtn}>
+      <Link href="/book/locations" className={linkBtn}>
         Browse by Location
       </Link>
     </div>
