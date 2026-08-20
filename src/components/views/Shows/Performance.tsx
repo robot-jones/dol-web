@@ -272,12 +272,17 @@ export const Performance = (): React.ReactNode => {
     if (color) setBgColor(color as DolColorHex);
   }, [setBgColor]);
 
+  // Unlike Background, Donut/Subject both have a real "None" option
+  // (AttributePickerShell passes real `undefined` for it) - `if (color)`
+  // silently swallowed that as "no change," so None never actually
+  // cleared anything. Both are already `DolColorHex | undefined` /
+  // `Subject | undefined` state, so just pass the value through.
   const handleDonutChanged = useCallback((color?: string) => {
-    if (color) setDonut(color as DolColorHex);
+    setDonut(color as DolColorHex | undefined);
   }, [setDonut]);
 
   const handleSubjectChanged = useCallback((position?: string) => {
-    if (position) setSubject(position as Subject);
+    setSubject(position as Subject | undefined);
   }, [setSubject]);
 
   const randomizeAttributes = () => {
