@@ -33,7 +33,7 @@ import {
 } from "@erikmuir/dol-lib/dapp";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { Loading } from "@/components/common/Loading";
-import { MintStatusIndicator } from "@/components/common/MintStatusIndicator";
+import { MintStatusBanner } from "@/components/common/MintStatusBanner";
 import {
   AuditLogsAttribute,
   DynamicAttributes,
@@ -788,11 +788,10 @@ export const Performance = (): React.ReactNode => {
     <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
         {getPageNote()}
-        <MintStatusIndicator
-          date={date}
-          position={parsedPosition}
+        <MintStatusBanner
           performance={performance}
-          className="justify-center text-md"
+          loading={performanceLoading}
+          className="max-w-[374px]"
         />
         {getImage()}
         {getMintButton()}
