@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 import { DolPerformance } from "@erikmuir/dol-lib/types";
-import { usePerformance } from "@/hooks";
-import { AnimatedDonut } from "./AnimatedDonut";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
+import { usePerformance, useMintStatus } from "@/hooks";
 
 export enum MintStatusIndicatorType {
   Emoji = "Emoji",
@@ -21,6 +21,9 @@ export type MintStatusIndicatorProps = {
   className?: string;
 };
 
+const getTextColorClass = (color: ReturnType<typeof useMintStatus>["color"]): string =>
+  color === "gray" ? "text-gray-medium" : getTwDolColor(color, TwColorClassPrefix.Text);
+
 export const MintStatusIndicator = ({
   date,
   position,
@@ -30,9 +33,6 @@ export const MintStatusIndicator = ({
 }: MintStatusIndicatorProps): React.ReactElement => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldFetch, setShouldFetch] = useState(false);
-  const [textColor, setTextColor] = useState<string>("text-gray-medium");
-  const [label, setLabel] = useState<string>("Loading");
-  const [emoji, setEmoji] = useState<React.ReactNode>(<AnimatedDonut sizeInPixels={16} />);
   const { performance: fetchedPerformance, performanceLoading } = usePerformance(date, shouldFetch ? position : undefined);
 
   useEffect(() => {
@@ -58,29 +58,9 @@ export const MintStatusIndicator = ({
     return () => observer.disconnect();
   }, [providedPerformance, shouldFetch]);
 
-  useEffect(() => {
-    const coalescedPerformance = { ...providedPerformance, ...fetchedPerformance };
-    const notFound = Boolean(!coalescedPerformance);
-    const isMinted = Boolean(coalescedPerformance?.serial);
-    const isLocked = Boolean(coalescedPerformance?.lockedBy);
-    const newTextColor = performanceLoading || notFound ? "text-gray-medium"
-      : isMinted ? "text-dol-red"
-      : isLocked ? "text-dol-yellow"
-      : "text-dol-green";
-    const newLabel = performanceLoading ? "Loading"
-      : notFound ? "Unknown"
-      : isMinted ? "Claimed"
-      : isLocked ? "Locked"
-      : "Available";
-    const newEmoji = performanceLoading ? <AnimatedDonut sizeInPixels={16} />
-      : notFound ? "❓"
-      : isMinted ? "🔴"
-      : isLocked ? "🟡"
-      : "🟢";
-    setTextColor(newTextColor);
-    setLabel(newLabel);
-    setEmoji(newEmoji);
-  }, [providedPerformance, fetchedPerformance, performanceLoading]);
+  const performance = providedPerformance ?? fetchedPerformance;
+  const { label, color, emoji } = useMintStatus(performance, performanceLoading);
+  const textColor = getTextColorClass(color);
 
   const title = type === MintStatusIndicatorType.Emoji ? label : "";
 
