@@ -5,9 +5,14 @@ import { type PerformanceImageAttributes } from "@erikmuir/dol-lib/types";
 import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import { Donut } from "@/components/common/Shapes";
 
+// Mirrors renderPerformanceImage (dol-lib) so the pre-mint preview matches
+// the real render exactly - square, no baked-in song title/performance ID.
+// That info is already carried in the NFT's own metadata (name/description),
+// which every wallet/marketplace displays alongside the image anyway - see
+// PUNCHLIST.md Phase 9. song/performanceId still come through in the shared
+// PerformanceImageAttributes type (used elsewhere, e.g. as the image's own
+// IPFS filename) - this component just no longer renders them.
 export const NFTPlaceholder = ({
-  song,
-  performanceId,
   bgColor,
   donut,
   subject,
@@ -19,7 +24,7 @@ export const NFTPlaceholder = ({
   return (
     <div
       className={twMerge(
-        "relative w-[374px] h-[420px] shadow-lg cursor-default",
+        "relative w-[374px] h-[374px] shadow-lg cursor-default",
         "rounded-2xl overflow-hidden border border-gray-dark",
         bgColorClassName
       )}
@@ -35,17 +40,6 @@ export const NFTPlaceholder = ({
           priority
         />
       )}
-      <div
-        className={twMerge(
-          "absolute bottom-0 left-0 right-0",
-          "p-1 text-center bg-gray-dark/75"
-        )}
-      >
-        <div className="text-dol-light text-balance">{song}</div>
-        <div className="text-dol-yellow text-[10px] tracking-wider">
-          {performanceId}
-        </div>
-      </div>
     </div>
   );
 };

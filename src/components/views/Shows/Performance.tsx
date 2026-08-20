@@ -553,7 +553,7 @@ export const Performance = (): React.ReactNode => {
   const getImage = (): React.ReactNode => {
     if (metadataLoading || !showImageAttributes) {
       return (
-        <div className="w-[374px] h-[420px] relative">
+        <div className="w-[374px] h-[374px] relative">
           <Loading sizeInPixels={90} />
         </div>
       );
@@ -563,7 +563,7 @@ export const Performance = (): React.ReactNode => {
         src={ipfsToHttps(metadata.image, process.env.NEXT_PUBLIC_PINATA_GATEWAY)}
         alt={metadata.name}
         width={374}
-        height={420}
+        height={374}
         className="shadow-lg cursor-default rounded-2xl border border-gray-dark w-auto h-auto"
         priority
       />
