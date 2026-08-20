@@ -61,3 +61,9 @@ global.ResizeObserver =
     unobserve() {}
     disconnect() {}
   };
+
+// jsdom doesn't implement Element.scrollIntoView at all (not even as a
+// no-op) - AttributePickerShell calls it to keep the active option in view
+// while navigating with arrow keys; any future component doing the same
+// would hit this identically.
+Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {});

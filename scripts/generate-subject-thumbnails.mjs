@@ -41,6 +41,9 @@ const CROPS = {
   "multibeast": { left: 520, top: 66 }, // all three heads
   "harpua": { left: 180, top: 256 }, // face + donut-patterned bandana
   "poster-nutbag": { left: 250, top: 236 }, // face + donut-patterned bandana
+  "multibeast-pup": { left: 460, top: 220 }, // two of the three heads,
+  // eyes + tongues - not a real Subject enum option today (see PUNCHLIST.md
+  // Phase 9), generated on request so it can be looked at like the rest
 };
 
 const run = async () => {
