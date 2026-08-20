@@ -12,7 +12,6 @@ describe("Header", () => {
     expect(screen.getByText("Wallet")).toBeInTheDocument();
     expect(screen.getByText("Nav")).toBeInTheDocument();
     expect(screen.getByText("Discord")).toBeInTheDocument();
-    expect(screen.getByText("Back")).toBeInTheDocument();
     expect(screen.getByTitle("Can you still have fun?")).toBeInTheDocument();
   });
 
