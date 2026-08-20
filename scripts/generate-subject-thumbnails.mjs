@@ -33,7 +33,9 @@ const CROPS = {
   "helping-friendly-book": { left: 282, top: 216 }, // title text, centered
   "lizard": { left: 450, top: 216 }, // eye + snout
   "famous-mockingbird": { left: 140, top: 216 }, // head, some wing either side
-  "llama": { left: 560, top: 190 }, // face + donut-patterned scarf
+  "llama": { left: 560, top: 80 }, // head/face - most recognizable part;
+  // the scarf alone doesn't distinguish it (other subjects wear the same
+  // donut-patterned neckwear), so head wins over scarf when only one fits
   "sloth": { left: 470, top: 346 }, // face - the one that needed a real script,
   // not CSS object-position, to reach at all (see PUNCHLIST.md Phase 9)
   "multibeast": { left: 520, top: 66 }, // all three heads
