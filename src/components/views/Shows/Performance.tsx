@@ -767,6 +767,30 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
+    return null;
+  };
+
+  // Same eligibility as getPageNote's fall-through case - only shown once
+  // none of the blocking/status notes above apply. Explains the mechanics,
+  // not a warning - collapsed by default so a repeat visitor isn't shown
+  // the same paragraph on every performance page.
+  const getHowMintingWorksNote = (): React.ReactNode => {
+    if (!performance || performance?.serial || performance?.lockedBy) {
+      return null;
+    }
+
+    if (blocked) {
+      return null;
+    }
+
+    if (collectionMintStatus === CollectionMintStatus.PRE && whitelisted) {
+      return null;
+    }
+
+    if (collectionMintStatus && collectionMintStatus !== CollectionMintStatus.ACTIVE) {
+      return null;
+    }
+
     const getAttributeTypeLabel = (text: string, className?: string) =>
       <span className={twMerge("font-bold", className)}>{text}</span>;
 
@@ -775,10 +799,6 @@ export const Performance = (): React.ReactNode => {
     const dynamic = getAttributeTypeLabel("Dynamic", "text-dol-green");
     const other = getAttributeTypeLabel("Other", "text-gray-medium");
 
-    // Explains the mechanics, not a warning - collapsed by default so a
-    // repeat visitor isn't shown the same paragraph on every performance
-    // page. "subtle" keeps it from competing with the heading right below
-    // it for attention (unlike Details, this isn't a section boundary).
     return (
       <Disclosure summary="How minting works" variant="subtle">
         <div className="text-justify pt-2">
@@ -844,6 +864,8 @@ export const Performance = (): React.ReactNode => {
         {mintAction.extra}
         {getStatusText()}
       </div>
+
+      {getHowMintingWorksNote()}
 
       {!isMinted && [...getImageAttributeComponents()]}
 
