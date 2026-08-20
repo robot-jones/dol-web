@@ -24,6 +24,7 @@ import {
   extractBgColor,
   extractDonut,
   extractSubject,
+  getPositionInSet,
   getSetlistLines,
   bgColors,
   donutColors,
@@ -32,8 +33,9 @@ import {
   getSetText,
 } from "@erikmuir/dol-lib/dapp";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
+import { Disclosure } from "@/components/common/Disclosure";
 import { Loading } from "@/components/common/Loading";
-import { MintStatusBanner } from "@/components/common/MintStatusBanner";
+import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
 import {
   AuditLogsAttribute,
   DynamicAttributes,
@@ -42,6 +44,7 @@ import {
   SectionHeader,
   OtherAttributes,
 } from "@/components/views/Shows/Attributes";
+import { PerformanceHeading } from "@/components/views/Shows/PerformanceHeading";
 import {
   useAccountStatus,
   useAppConfigStatus,
@@ -558,7 +561,7 @@ export const Performance = (): React.ReactNode => {
   const getImage = (): React.ReactNode => {
     if (metadataLoading || !showImageAttributes) {
       return (
-        <div className="w-[374px] h-[374px] relative">
+        <div className="w-full aspect-square relative">
           <Loading sizeInPixels={90} />
         </div>
       );
@@ -569,7 +572,8 @@ export const Performance = (): React.ReactNode => {
         alt={metadata.name}
         width={374}
         height={374}
-        className="shadow-lg cursor-default rounded-2xl border border-gray-dark w-auto h-auto"
+        sizes="(min-width: 1024px) 680px, (min-width: 768px) 500px, (min-width: 640px) 448px, 320px"
+        className="shadow-lg cursor-default rounded-2xl border border-gray-dark w-full h-auto"
         priority
       />
     ) : (
@@ -595,26 +599,44 @@ export const Performance = (): React.ReactNode => {
     );
   };
 
-  const getMintButton = (): React.ReactNode => {
+  // Single source of truth for both the pill's color/label (replacing
+  // MintStatusBanner) and whether it's actually clickable (replacing
+  // getMintButton) - same branch order/conditions the old getMintButton
+  // used, so behavior is unchanged, just no longer split across two
+  // independent state machines. `extra` is secondary UI (Release button,
+  // "locked for" note, associate error) that doesn't fit inside a single
+  // pill and renders below it, same as before.
+  type MintAction = {
+    color: MintActionColor;
+    label: string;
+    onClick?: () => void;
+    extra?: React.ReactNode;
+  };
+
+  const getMintAction = (): MintAction => {
     if (performanceLoading || isAssociatedLoading || accountStatusLoading) {
-      return <DolButton color="gray" roundedFull disabled>Please Wait...</DolButton>;
+      return { color: "gray", label: "Checking availability…" };
     }
     if (!accountId) {
-      return (
-        <DolButton color="blue" roundedFull onClick={handleConnectClick}>Connect your wallet</DolButton>
-      );
+      return { color: "blue", label: "Connect Your Wallet", onClick: handleConnectClick };
     }
     if (!isAssociated) {
-      return (
-        <div className="flex flex-col items-center gap-2">
-          <DolButton color="blue" roundedFull onClick={handleAssociateClick}>Associate the token</DolButton>
-          {associateError && (
-            <div className="text-xs text-dol-red text-center">
-              Failed to associate token. Please try again.
-            </div>
-          )}
-        </div>
-      );
+      return {
+        color: "blue",
+        label: "Associate The Token",
+        onClick: handleAssociateClick,
+        extra: associateError ? (
+          <div className="text-xs text-dol-red text-center">
+            Failed to associate token. Please try again.
+          </div>
+        ) : null,
+      };
+    }
+    // Covers the gap between clicking Mint and preparedTx landing - the
+    // old `disabled` list special-cased Claiming for the same reason (no
+    // double-submit while the pre-transfer request is in flight).
+    if (status === MintStatusDisplayText.Claiming) {
+      return { color: "blue", label: "Claiming…" };
     }
     if (preparedTx) {
       // Gated on walletWaitTimedOut so a normal-speed approval never sees
@@ -622,18 +644,48 @@ export const Performance = (): React.ReactNode => {
       // already reset by then) - by then the transfer's a known success,
       // nothing left to release.
       const canRelease = walletWaitTimedOut;
-      return (
-        <div className="flex flex-col items-center gap-2">
-          <DolButton color="blue" roundedFull disabled>
-            {status === MintStatusDisplayText.UpdatingMetadata
-              ? "Updating Metadata..."
-              : "Waiting for Your Wallet..."}
-          </DolButton>
-          {canRelease && (
-            <>
-              <div className="text-xs text-gray-medium text-center max-w-[280px]">
-                Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
-              </div>
+      return {
+        color: "blue",
+        label: status === MintStatusDisplayText.UpdatingMetadata
+          ? "Updating Metadata…"
+          : "Waiting For Your Wallet…",
+        extra: (
+          <div className="flex flex-col items-center gap-2">
+            {canRelease && (
+              <>
+                <div className="text-xs text-gray-medium text-center max-w-[280px]">
+                  Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
+                </div>
+                <DolButton
+                  size="sm"
+                  color="red"
+                  outline
+                  roundedFull
+                  onClick={handleReleaseClick}
+                  disabled={releasingClaim}
+                >
+                  {releasingClaim ? "Releasing..." : "Release"}
+                </DolButton>
+              </>
+            )}
+            {getLockedForNote(preparedTx.lockedAt)}
+          </div>
+        ),
+      };
+    }
+    if (performance?.serial) {
+      return { color: "red", label: "Already in Someone's Stash" };
+    }
+    if (performance?.lockedBy) {
+      // Only for your own lock - releasing someone else's is still
+      // admin-script territory.
+      const isOwnLock = performance.lockedBy === accountId;
+      return {
+        color: "yellow",
+        label: "Someone's Claiming This",
+        extra: (
+          <div className="flex flex-col items-center gap-2">
+            {isOwnLock && (
               <DolButton
                 size="sm"
                 color="red"
@@ -644,73 +696,25 @@ export const Performance = (): React.ReactNode => {
               >
                 {releasingClaim ? "Releasing..." : "Release"}
               </DolButton>
-            </>
-          )}
-          {getLockedForNote(preparedTx.lockedAt)}
-        </div>
-      );
-    }
-    if (performance?.serial) {
-      return (
-        <DolButton color="gray" roundedFull disabled>Already Minted</DolButton>
-      );
-    }
-    if (performance?.lockedBy) {
-      // Only for your own lock - releasing someone else's is still
-      // admin-script territory.
-      const isOwnLock = performance.lockedBy === accountId;
-      return (
-        <div className="flex flex-col items-center gap-2">
-          <DolButton color="gray" roundedFull disabled>Locked</DolButton>
-          {isOwnLock && (
-            <DolButton
-              size="sm"
-              color="red"
-              outline
-              roundedFull
-              onClick={handleReleaseClick}
-              disabled={releasingClaim}
-            >
-              {releasingClaim ? "Releasing..." : "Release"}
-            </DolButton>
-          )}
-          {getLockedForNote(performance.lockedAt)}
-        </div>
-      );
+            )}
+            {getLockedForNote(performance.lockedAt)}
+          </div>
+        ),
+      };
     }
     if (blocked) {
       // What a blocked user is told beyond this is still an open
       // question (no "request review" channel exists yet).
-      return (
-        <DolButton color="gray" roundedFull disabled>Minting Unavailable</DolButton>
-      );
+      return { color: "gray", label: "Minting Unavailable" };
     }
     if (!mintEnabled && !whitelisted) {
-      return (
-        <DolButton color="gray" roundedFull disabled>Public Mint: TBA</DolButton>
-      );
+      return { color: "gray", label: "Public Mint: TBA" };
     }
-    const disabled =
-      blocked ||
-      (!mintEnabled && !whitelisted) ||
-      !Boolean(performance) ||
-      [
-        MintStatusDisplayText.Claiming,
-        MintStatusDisplayText.AlreadyMinted,
-        MintStatusDisplayText.InitiatingTransfer,
-        MintStatusDisplayText.UpdatingMetadata,
-        MintStatusDisplayText.MintComplete,
-      ].includes(status);
-    return (
-      <DolButton
-        color="blue"
-        roundedFull
-        onClick={handleClaimClick}
-        disabled={disabled}
-      >
-        Mint: {`${process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46"}`} ℏ
-      </DolButton>
-    );
+    return {
+      color: "green",
+      label: `Mint: ${process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46"} ℏ`,
+      onClick: handleClaimClick,
+    };
   };
 
   const getStatusText = (): React.ReactNode => {
@@ -771,13 +775,19 @@ export const Performance = (): React.ReactNode => {
     const dynamic = getAttributeTypeLabel("Dynamic", "text-dol-green");
     const other = getAttributeTypeLabel("Other", "text-gray-medium");
 
+    // Explains the mechanics, not a warning - collapsed by default so a
+    // repeat visitor isn't shown the same paragraph on every performance
+    // page. "subtle" keeps it from competing with the heading right below
+    // it for attention (unlike Details, this isn't a section boundary).
     return (
-      <div className="text-justify">
-        Feel free to modify or randomize the {customizable} attributes to your liking! When you mint,{" "}
-        they&apos;ll be written to the NFT&apos;s metadata on chain, along with the {fixed} attributes{" "}
-        — <em>including the MP3 link!</em> ({dynamic} and {other} attributes will not be written on chain,{" "}
-        but can still be viewed on this page.)
-      </div>
+      <Disclosure summary="How minting works" variant="subtle">
+        <div className="text-justify pt-2">
+          Feel free to modify or randomize the {customizable} attributes to your liking! When you mint,{" "}
+          they&apos;ll be written to the NFT&apos;s metadata on chain, along with the {fixed} attributes{" "}
+          — <em>including the MP3 link!</em> ({dynamic} and {other} attributes will not be written on chain,{" "}
+          but can still be viewed on this page.)
+        </div>
+      </Disclosure>
     );
   };
 
@@ -789,87 +799,83 @@ export const Performance = (): React.ReactNode => {
     .map((s: SetlistLine) => (s.isCurrentPosition ? `${boldIndicator}${s.text}` : s.text))
     .join("\n");
 
+  const positionInSet = setlist && setlists
+    ? getPositionInSet(setlists, setlist.set, setlist.position)
+    : undefined;
+
+  const mintAction = getMintAction();
+  const isMinted = Boolean(performance?.serial);
+
+  const getImageAttributeComponents = () => showImageAttributes ? [
+      <SectionHeader
+        text="Customizable NFT Attributes"
+        key="custom-nft-attributes-section-header"
+      />,
+      <ImageAttributes
+        key="custom-nft-attributes-section"
+        bgColor={bgColor}
+        donut={donut}
+        subject={subject}
+        minted={isMinted}
+        handleBgColorChanged={handleBgColorChanged}
+        handleDonutChanged={handleDonutChanged}
+        handleSubjectChanged={handleSubjectChanged}
+        handleRandomizeClick={handleRandomizeClick}
+        handleRandomizeKeyDown={handleRandomizeKeyDown}
+      />
+    ] : [];
+
   return (
     <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
         {getPageNote()}
-        <MintStatusBanner
-          performance={performance}
-          loading={performanceLoading}
-          className="max-w-[374px]"
+        <PerformanceHeading
+          song={attributes.song}
+          date={attributes.date}
+          set={attributes.set}
+          positionInSet={positionInSet}
         />
         {getImage()}
-        {getMintButton()}
+        <MintActionPill
+          color={mintAction.color}
+          label={mintAction.label}
+          onClick={mintAction.onClick}
+        />
+        {mintAction.extra}
         {getStatusText()}
       </div>
 
-      {showImageAttributes && (
-        <SectionHeader
-          text="Customizable NFT Attributes"
-          borderClass="border-dol-yellow"
-          backgroundClass="bg-dol-yellow/25"
+      {!isMinted && [...getImageAttributeComponents()]}
+
+      <Disclosure summary="Details">
+        {isMinted && [...getImageAttributeComponents()]}
+
+        <SectionHeader text="Fixed NFT Attributes" />
+        <FixedAttributes
+          attributes={attributes}
+          trackLoading={trackLoading}
+          setlistLoading={setlistLoading}
+          setlistsLoading={setlistsLoading}
+          songLoading={songLoading}
+          song={song}
         />
-      )}
 
-      {showImageAttributes && (
-        <ImageAttributes
-          bgColor={bgColor}
-          donut={donut}
-          subject={subject}
-          minted={Boolean(performance?.serial)}
-          handleBgColorChanged={handleBgColorChanged}
-          handleDonutChanged={handleDonutChanged}
-          handleSubjectChanged={handleSubjectChanged}
-          handleRandomizeClick={handleRandomizeClick}
-          handleRandomizeKeyDown={handleRandomizeKeyDown}
+        <SectionHeader text="Dynamic Attributes" />
+        <DynamicAttributes song={song} songLoading={songLoading} />
+
+        <SectionHeader text="Other Attributes" />
+        <OtherAttributes
+          setlist={setlist}
+          setlistLoading={setlistLoading}
+          formattedSetlist={formattedSetlist}
+          setlistsLoading={setlistsLoading}
+          song={song}
+          songLoading={songLoading}
         />
-      )}
 
-      <SectionHeader
-        text="Fixed NFT Attributes"
-        borderClass="border-dol-blue"
-        backgroundClass="bg-dol-blue/25"
-      />
-
-      <FixedAttributes
-        attributes={attributes}
-        trackLoading={trackLoading}
-        setlistLoading={setlistLoading}
-        setlistsLoading={setlistsLoading}
-        songLoading={songLoading}
-        song={song}
-      />
-
-      <SectionHeader
-        text="Dynamic Attributes"
-        borderClass="border-dol-green"
-        backgroundClass="bg-dol-green/25"
-      />
-
-      <DynamicAttributes song={song} songLoading={songLoading} />
-
-      <SectionHeader
-        text="Other Attributes"
-        borderClass="border-gray-medium"
-        backgroundClass="bg-gray-dark/75"
-      />
-
-      <OtherAttributes
-        setlist={setlist}
-        setlistLoading={setlistLoading}
-        formattedSetlist={formattedSetlist}
-        setlistsLoading={setlistsLoading}
-        song={song}
-        songLoading={songLoading}
-      />
-
-      <SectionHeader
-        text="Audit Logs"
-        borderClass="border-gray-medium"
-        backgroundClass="bg-dol-dark"
-      />
-
-      <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
+        <SectionHeader text="Audit Logs" />
+        <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
+      </Disclosure>
     </div>
   );
 };

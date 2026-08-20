@@ -16,11 +16,13 @@ export type MintStatus = {
 
 // Single source of truth for "what does this performance's mint status
 // mean" - color, label, and emoji all derived from the same few booleans.
-// MintStatusIndicator (compact inline pill, 3 call sites) and
-// MintStatusBanner (Performance.tsx's hero) both consume this instead of
-// each re-deriving it independently - exactly the kind of split-brain-
-// status risk the `mutatePerformance`/staleness work (PUNCHLIST Finding 51)
-// already cost real debugging time on once. See PUNCHLIST.md Phase 9.
+// MintStatusIndicator (compact inline pill, 3 call sites) consumes this
+// instead of re-deriving it independently - exactly the kind of split-
+// brain-status risk the `mutatePerformance`/staleness work (PUNCHLIST
+// Finding 51) already cost real debugging time on once. Performance.tsx's
+// own hero pill (MintActionPill) has since grown beyond this hook's
+// performance-only states (wallet connection, association, app-wide
+// gating) and resolves its color/label itself - see PUNCHLIST.md Phase 9.
 export const useMintStatus = (
   performance?: DolPerformance,
   loading?: boolean
