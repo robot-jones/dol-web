@@ -2,10 +2,12 @@ import Image from "next/image";
 import { MdAutorenew } from "react-icons/md";
 import { twMerge } from "tailwind-merge";
 import { DolColorHex, Subject } from "@erikmuir/dol-lib/types";
+import { getDolColorDisplayName, getDolColorFromHexValue } from "@erikmuir/dol-lib/dapp";
 import {
   AttributePickerShell,
   PickerOption,
 } from "../AttributeTypes/AttributePickerShell";
+import { DataAttribute } from "../AttributeTypes/DataAttribute";
 
 const getDolColorOptions = (): PickerOption<DolColorHex>[] => [
   { label: "Blue", value: DolColorHex.Blue },
@@ -165,6 +167,30 @@ export const ImageAttributes = ({
   handleRandomizeClick,
   handleRandomizeKeyDown,
 }: ImageAttributesProps): React.ReactNode => {
+  // Once minted these are permanent on-chain facts, not a form - a
+  // disabled picker still looks like a dropdown that could open, which is
+  // actively misleading for a value that never will again. Match the same
+  // plain read-only tile every other on-chain attribute already uses
+  // (FixedAttributes' DataAttribute) instead of a grayed-out control.
+  if (minted) {
+    const subjectLabel = getSubjectOptions().find((o) => o.value === subject)?.label;
+    return (
+      <div className="flex flex-wrap justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
+        <DataAttribute
+          label="Background"
+          data={getDolColorDisplayName(getDolColorFromHexValue(bgColor))}
+          attributeColor={"yellow"}
+        />
+        <DataAttribute
+          label="Donut"
+          data={donut && getDolColorDisplayName(getDolColorFromHexValue(donut))}
+          attributeColor={"yellow"}
+        />
+        <DataAttribute label="Subject" data={subjectLabel} attributeColor={"yellow"} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
       <AttributePickerShell
@@ -174,7 +200,6 @@ export const ImageAttributes = ({
         options={getDolColorOptions()}
         onChange={handleBgColorChanged}
         attributeColor={"yellow"}
-        disabled={minted}
         renderOption={renderBackgroundOption}
       />
       <AttributePickerShell
@@ -184,7 +209,6 @@ export const ImageAttributes = ({
         options={[{ label: "None", value: undefined }, ...getDolColorOptions()]}
         onChange={handleDonutChanged}
         attributeColor={"yellow"}
-        disabled={minted}
         renderOption={renderDonutOption}
       />
       <AttributePickerShell
@@ -194,10 +218,9 @@ export const ImageAttributes = ({
         options={[{ label: "None", value: undefined }, ...getSubjectOptions()]}
         onChange={handleSubjectChanged}
         attributeColor={"yellow"}
-        disabled={minted}
         renderOption={renderSubjectOption}
       />
-      {!minted && (
+      {
         // Each AttributePickerShell is a label sitting above its trigger
         // button, so the outer row's items-center centers this against
         // the *label+button* pair, not the button alone - the icon reads
@@ -207,22 +230,22 @@ export const ImageAttributes = ({
         // automatically if the label style ever changes) sits above a box
         // matched to the trigger's own rendered height (measured: 30px),
         // with the icon centered inside that box - not the icon itself.
-        <div className="flex flex-col items-center mt-2 lg:mt-0 lg:ml-2">
-          <span aria-hidden className="invisible block text-[10px] uppercase pb-1">&nbsp;</span>
-          <div className="h-[30px] flex items-center">
-            <MdAutorenew
-              size={40}
-              className={twMerge("p-[6px] shadow-md rounded-full cursor-pointer", "animate-color-cycle")}
-              title="Randomize"
-              role="button"
-              aria-label="Randomize"
-              onClick={handleRandomizeClick}
-              onKeyDown={handleRandomizeKeyDown}
-              tabIndex={0}
-            />
-          </div>
+      }
+      <div className="flex flex-col items-center mt-2 lg:mt-0 lg:ml-2">
+        <span aria-hidden className="invisible block text-[10px] uppercase pb-1">&nbsp;</span>
+        <div className="h-[30px] flex items-center">
+          <MdAutorenew
+            size={40}
+            className={twMerge("p-[6px] shadow-md rounded-full cursor-pointer", "animate-color-cycle")}
+            title="Randomize"
+            role="button"
+            aria-label="Randomize"
+            onClick={handleRandomizeClick}
+            onKeyDown={handleRandomizeKeyDown}
+            tabIndex={0}
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 };

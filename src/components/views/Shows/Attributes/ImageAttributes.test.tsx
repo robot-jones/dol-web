@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { DolColorHex } from "@erikmuir/dol-lib/types";
+import { DolColorHex, Subject } from "@erikmuir/dol-lib/types";
 import { ImageAttributes } from "./ImageAttributes";
 
 const baseProps = {
@@ -58,5 +58,37 @@ describe("ImageAttributes randomize control (Finding 39)", () => {
     );
     fireEvent.keyDown(screen.getByRole("button", { name: "Randomize" }), { key: "Enter" });
     expect(handleRandomizeKeyDown).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ImageAttributes once minted", () => {
+  it("shows read-only values instead of pickers - permanent on-chain facts, not a disabled form", () => {
+    render(
+      <ImageAttributes
+        {...baseProps}
+        minted
+        donut={DolColorHex.Red}
+        subject={Subject.Lizard}
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText("Blue")).toBeInTheDocument();
+    expect(screen.getByText("Red")).toBeInTheDocument();
+    expect(screen.getByText("Lizard")).toBeInTheDocument();
+  });
+
+  it("falls back to the shared --null-- treatment when there's no donut", () => {
+    render(
+      <ImageAttributes
+        {...baseProps}
+        minted
+        subject={Subject.Lizard}
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    expect(screen.getByText("--null--")).toBeInTheDocument();
   });
 });

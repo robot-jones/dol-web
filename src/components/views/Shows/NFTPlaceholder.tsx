@@ -24,19 +24,27 @@ export const NFTPlaceholder = ({
   return (
     <div
       className={twMerge(
-        "relative w-[374px] h-[374px] shadow-lg cursor-default",
+        "relative w-full aspect-square shadow-lg cursor-default",
         "rounded-2xl overflow-hidden border border-gray-dark",
         bgColorClassName
       )}
     >
-      {donut && <Donut sizeInPixels={300} color={donut} className="m-[36px]" />}
+      {/* Percentage-based, not sizeInPixels - keeps the same ~80%-filled,
+          centered look (was 300px donut / 36px margin on a fixed 374px box)
+          now that this box is full-width and its size varies by breakpoint. */}
+      {donut && (
+        <Donut
+          color={donut}
+          className="absolute top-[9.63%] left-[9.63%] w-[80.21%] h-[80.21%]"
+        />
+      )}
       {subject && (
         <Image
           src={`/subjects/${subject}.png`}
           alt={subject}
-          width={372}
-          height={372}
-          className="absolute top-0 left-0"
+          fill
+          sizes="(min-width: 1024px) 680px, (min-width: 768px) 500px, (min-width: 640px) 448px, 320px"
+          className="object-cover"
           priority
         />
       )}

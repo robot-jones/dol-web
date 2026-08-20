@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { MintStatusIndicator, MintStatusIndicatorType } from "./MintStatusIndicator";
 import type { MintStatus } from "@/hooks";
 
-// Same reason as MintStatusBanner.test.tsx: this component imports both
-// useMintStatus and usePerformance via the `@/hooks` barrel, which also
-// eagerly loads the real WalletConnect SDK (use-wallet-interface.ts) at
-// module-import time - throws in jsdom. Full-replace the barrel, matching
-// the established StashItem.test.tsx/Wallet.test.tsx pattern.
+// This component imports both useMintStatus and usePerformance via the
+// `@/hooks` barrel, which also eagerly loads the real WalletConnect SDK
+// (use-wallet-interface.ts) at module-import time - throws in jsdom.
+// Full-replace the barrel, matching the established
+// StashItem.test.tsx/Wallet.test.tsx pattern.
 const mockStatus = vi.fn<() => MintStatus>();
 vi.mock("@/hooks", () => ({
   useMintStatus: () => mockStatus(),
