@@ -38,21 +38,21 @@ export const Header = () => {
         "z-10",
       )}
     >
-      <div className="flex flex-wrap items-center justify-between p-2">
+      <div className="header-grid items-center gap-x-2 p-2">
         <div
-          className="flex items-center gap-2 cursor-default"
+          className="[grid-area:logo] flex items-center gap-2 cursor-default"
           title="Can you still have fun?"
         >
           <a href="https://wilson.com" target="_blank" rel="noopener noreferrer">
             <Shapes sizeInPixels={20} bounceOnHover />
           </a>
         </div>
-        <div className="pr-2 flex items-center gap-2">
+        <div className="[grid-area:nav] px-2 pt-2 pb-8 min-[900px]:py-2"><Nav /></div>
+        <div className="[grid-area:actions] pr-2 flex items-center justify-end gap-2">
           <DiscordLink sizeInPixels={24} />
           <Wallet />
         </div>
       </div>
-      <div className="px-2 pt-2 pb-8"><Nav /></div>
     </header>
   );
 };
