@@ -161,9 +161,6 @@ export const LogSection = ({
               {getLogContext(log)}
             </td>
             <td className={twMerge(row, border, monospace)}>
-              {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
-            </td>
-            <td className={twMerge(row, border, monospace, "pr-4")}>
               {transactionId && (
                 <a
                   href={getHashScanUrl(transactionId)}
@@ -176,6 +173,9 @@ export const LogSection = ({
                   <FaExternalLinkAlt size={12} />
                 </a>
               )}
+            </td>
+            <td className={twMerge(row, border, monospace, "pr-4")}>
+              {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
             </td>
           </tr>
         );
