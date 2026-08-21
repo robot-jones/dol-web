@@ -26,7 +26,7 @@ export const PerformanceHeading = ({
 
   return (
     <div className="text-center">
-      <h1 className="text-2xl font-bold">{song || "Loading…"}</h1>
+      <h1 className="text-2xl text-balance font-bold">{song || "Loading…"}</h1>
       {subline && <div className="text-sm text-gray-medium">{subline}</div>}
     </div>
   );
