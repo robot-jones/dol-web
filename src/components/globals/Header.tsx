@@ -38,7 +38,7 @@ export const Header = () => {
         "z-10",
       )}
     >
-      <div className="header-grid items-center gap-x-2 p-2">
+      <div className="header-grid items-start gap-x-2 p-2 pb-4">
         <div
           className="[grid-area:logo] flex items-center gap-2 cursor-default"
           title="Can you still have fun?"
