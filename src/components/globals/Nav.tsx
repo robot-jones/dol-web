@@ -7,7 +7,12 @@ import { twMerge } from "tailwind-merge";
 export const Nav = (): React.ReactElement => {
   const pathname = usePathname();
   return (
-    <div className="w-full mx-auto max-w-5xl">
+    // Capped tighter than the merged-row max-w-5xl below 900px (kept in
+    // sync with Header.tsx/globals.css's breakpoint) - full-width flex-1
+    // tabs stretch to fill whatever they're given, and left uncapped
+    // they sprawl awkwardly wide on tablet-ish viewports that are still
+    // narrow enough to have the nav on its own row.
+    <div className="w-full mx-auto max-w-xl min-[900px]:max-w-5xl">
       <div className="flex justify-start items-center gap-4">
         <NavTab
           name="Home"

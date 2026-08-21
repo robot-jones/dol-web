@@ -404,6 +404,40 @@ audio {
 }
 
 /*
+ * Header row layout: below 900px there's not enough room for the logo,
+ * nav tabs, and discord-link/wallet all on one line, so the nav drops
+ * to a row of its own underneath (the original fixed two-row header).
+ * At 900px and up they all fit on one line (with room to spare - the
+ * three pieces need roughly 625px at minimum), so nav moves in between
+ * logo and actions - equal 1fr side columns keep it centered on the
+ * row even though logo and actions aren't the same width as each other.
+ * This 900px figure is shared with Header.tsx and Nav.tsx's matching
+ * `min-[900px]:` variants - keep all three in sync if it moves.
+ */
+.header-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "logo actions"
+    "nav nav";
+}
+
+@media (min-width: 900px) {
+  .header-grid {
+    /*
+     * The nav column isn't `auto` - Nav's tabs are `flex-1`, so they
+     * divide whatever width they're given evenly regardless of each
+     * tab's own text length. An auto/content-sized track gives them
+     * only as much total width as the tabs' (unequal) natural widths
+     * sum to, and dividing that evenly then shorts the longest labels
+     * by a few px, wrapping them. 64rem matches Nav's own max-w-5xl cap.
+     */
+    grid-template-columns: 1fr minmax(0, 64rem) 1fr;
+    grid-template-areas: "logo nav actions";
+  }
+}
+
+/*
  * Respect a user's OS-level reduced-motion preference for the app's two
  * infinite/looping animations - AnimatedDonut's spin (the loading
  * indicator used throughout the app) and the randomize icon's
