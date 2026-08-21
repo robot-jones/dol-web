@@ -1,13 +1,14 @@
 process.env.NEXT_PUBLIC_HFB_COLLECTION_ID = "0.0.token";
+process.env.NEXT_PUBLIC_TREASURY_ACCOUNT = "0.0.treasury";
 
 const getAppConfigMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
 }));
 
-const getTokenInfoMock = vi.fn();
+const getTokenBalanceMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/api", () => ({
-  getMirrorClient: () => ({ getTokenInfo: (...a: unknown[]) => getTokenInfoMock(...a) }),
+  getMirrorClient: () => ({ getTokenBalance: (...a: unknown[]) => getTokenBalanceMock(...a) }),
 }));
 
 import { GET } from "./route";
@@ -15,7 +16,7 @@ import { GET } from "./route";
 describe("/api/config/status GET", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getTokenInfoMock.mockResolvedValue({ total_supply: "0", max_supply: "555" });
+    getTokenBalanceMock.mockResolvedValue(555);
   });
 
   it("fails closed (mintEnabled false, PRE) when no config row exists yet", async () => {
@@ -39,7 +40,7 @@ describe("/api/config/status GET", () => {
       pausedReason: "investigating",
       launchedAt: 1700000000000,
     });
-    getTokenInfoMock.mockResolvedValueOnce({ total_supply: "1", max_supply: "555" });
+    getTokenBalanceMock.mockResolvedValueOnce(554);
     const res = await GET();
     const body = await res.json();
     expect(body.data).toEqual({ mintEnabled: false, collectionMintStatus: "PAUSED" });
@@ -57,11 +58,24 @@ describe("/api/config/status GET", () => {
     expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "ENDED" });
   });
 
-  it("reflects a sold-out collection as SOLD_OUT, regardless of mintEnabled/endedAt", async () => {
+  // Regression test: this used to be driven by on-chain total_supply/
+  // max_supply, which are equal from the moment the collection is
+  // pre-minted - long before any real sale - so this branch fired
+  // permanently, site-wide, well before it should have. Now driven by the
+  // treasury's actual remaining balance instead.
+  it("reflects a sold-out collection (treasury balance 0) as SOLD_OUT, regardless of mintEnabled/endedAt", async () => {
     getAppConfigMock.mockResolvedValueOnce({ id: "global", mintEnabled: true, launchedAt: 1700000000000 });
-    getTokenInfoMock.mockResolvedValueOnce({ total_supply: "555", max_supply: "555" });
+    getTokenBalanceMock.mockResolvedValueOnce(0);
     const res = await GET();
     const body = await res.json();
     expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "SOLD_OUT" });
+  });
+
+  it("does not report SOLD_OUT just because the pre-mint has already put every serial on-chain - only an empty treasury counts", async () => {
+    getAppConfigMock.mockResolvedValueOnce({ id: "global", mintEnabled: true, launchedAt: 1700000000000 });
+    getTokenBalanceMock.mockResolvedValueOnce(554); // one sold, 554 left - not sold out
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data.collectionMintStatus).toBe("ACTIVE");
   });
 });
