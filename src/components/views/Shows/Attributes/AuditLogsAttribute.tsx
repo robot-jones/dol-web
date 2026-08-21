@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { FaExternalLinkAlt } from "react-icons/fa";
 import { twMerge } from "tailwind-merge";
 import { Setlist } from "@erikmuir/dol-lib/types";
+import { getHashScanUrl } from "@erikmuir/dol-lib/dapp";
 import {
   FailureStatusIcon,
   SuccessStatusIcon,
@@ -36,6 +38,7 @@ export const AuditLogsAttribute = ({
       <td className={twMerge(row, border, header, "w-[20%]")}>Account</td>
       <td className={twMerge(row, border, header)}>Action</td>
       <td className={twMerge(row, border, header, "w-[1%]")}></td>
+      <td className={twMerge(row, border, header, "w-[1%]")}></td>
     </tr>,
   ];
   if (auditLogs && auditLogs.length > 0) {
@@ -49,6 +52,7 @@ export const AuditLogsAttribute = ({
           const dateTime = `${dateString} ${timeString}`;
           const accountIdText =
             log.accountId === `${process.env.NEXT_PUBLIC_TREASURY_ACCOUNT}` ? "SYSTEM" : log.accountId;
+          const { transactionId } = log.context;
           return (
             <tr key={index} className={log.success ? "" : "bg-dol-red/10"}>
               <td className={twMerge(row, border, monospace)}>{dateTime}</td>
@@ -58,6 +62,20 @@ export const AuditLogsAttribute = ({
               <td className={twMerge(row, border, monospace)}>{log.action}</td>
               <td className={twMerge(row, border, monospace, "w-[1%] pr-4")}>
                 {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
+              </td>
+              <td className={twMerge(row, border, monospace, "w-[1%] pr-4")}>
+                {transactionId && (
+                  <a
+                    href={getHashScanUrl(transactionId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="View on HashScan"
+                    aria-label="View on HashScan"
+                    className="text-gray-light hover:text-dol-light"
+                  >
+                    <FaExternalLinkAlt size={12} />
+                  </a>
+                )}
               </td>
             </tr>
           );
