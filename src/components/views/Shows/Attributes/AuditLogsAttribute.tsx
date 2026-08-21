@@ -61,9 +61,6 @@ export const AuditLogsAttribute = ({
               </td>
               <td className={twMerge(row, border, monospace)}>{log.action}</td>
               <td className={twMerge(row, border, monospace, "w-[1%] pr-4")}>
-                {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
-              </td>
-              <td className={twMerge(row, border, monospace, "w-[1%] pr-4")}>
                 {transactionId && (
                   <a
                     href={getHashScanUrl(transactionId)}
@@ -76,6 +73,9 @@ export const AuditLogsAttribute = ({
                     <FaExternalLinkAlt size={12} />
                   </a>
                 )}
+              </td>
+              <td className={twMerge(row, border, monospace, "w-[1%] pr-4")}>
+                {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
               </td>
             </tr>
           );
