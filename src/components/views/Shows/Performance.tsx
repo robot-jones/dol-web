@@ -130,12 +130,15 @@ export const Performance = (): React.ReactNode => {
   const { accountStatus, accountStatusLoading } = useAccountStatus(accountId);
   const { appConfigStatus } = useAppConfigStatus();
 
-  const whitelisted = Boolean(accountStatus?.whitelisted);
-  const blocked = Boolean(accountStatus?.blocked);
-  // Undefined while loading defaults to false, same fail-closed default
-  // the route side uses.
-  const mintEnabled = Boolean(appConfigStatus?.mintEnabled);
+  const isWhitelisted = Boolean(accountStatus?.whitelisted);
+  const isBlocked = Boolean(accountStatus?.blocked);
   const collectionMintStatus = appConfigStatus?.collectionMintStatus;
+  const isMinted = Boolean(performance?.serial);
+  const isLocked = Boolean(performance?.lockedBy);
+  const isActive = collectionMintStatus === CollectionMintStatus.ACTIVE;
+  const isPresale = collectionMintStatus === CollectionMintStatus.PRE;
+  const isPerformanceAvailable = performance && !isMinted && !isLocked;
+  const isMintable = isPerformanceAvailable && !isBlocked && (isActive || (isPresale && isWhitelisted));
 
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
@@ -702,12 +705,10 @@ export const Performance = (): React.ReactNode => {
         ),
       };
     }
-    if (blocked) {
-      // What a blocked user is told beyond this is still an open
-      // question (no "request review" channel exists yet).
+    if (isBlocked) {
       return { color: "gray", label: "Minting Unavailable" };
     }
-    if (!mintEnabled && !whitelisted) {
+    if (!isMintable) {
       return { color: "gray", label: "Public Mint: TBA" };
     }
     return {
@@ -735,23 +736,12 @@ export const Performance = (): React.ReactNode => {
     ) : null;
   };
 
-  const getPageNote = (): React.ReactNode => {
-    if (!performance || performance?.serial || performance?.lockedBy) {
+  const getInactiveMintNote = (): React.ReactNode => {
+    if (!collectionMintStatus || !isPerformanceAvailable || isBlocked || isActive) {
       return null;
     }
 
-    if (blocked) {
-      return (
-        <PageNote color="red" className="text-center">
-          Minting is currently unavailable for this account.
-        </PageNote>
-      );
-    }
-
-    // "Early access" only reads true pre-launch - not if the sale's since
-    // been paused/ended/sold out, even though canMint doesn't distinguish
-    // those cases server-side.
-    if (collectionMintStatus === CollectionMintStatus.PRE && whitelisted) {
+    if (isPresale && isWhitelisted) {
       return (
         <PageNote color="green" className="text-center">
           {CollectionMintStatusDisplayText.PRE} But I saw you with a Ticket Stub in your hand, so you&apos;re allowed in early!
@@ -759,37 +749,15 @@ export const Performance = (): React.ReactNode => {
       );
     }
 
-    if (collectionMintStatus && collectionMintStatus !== CollectionMintStatus.ACTIVE) {
-      return (
-        <PageNote color="red" className="text-center">
-          {CollectionMintStatusDisplayText[collectionMintStatus]}
-        </PageNote>
-      );
-    }
-
-    return null;
+    return (
+      <PageNote color="red" className="text-center">
+        {CollectionMintStatusDisplayText[collectionMintStatus]}
+      </PageNote>
+    );
   };
 
-  // Same eligibility as getPageNote's fall-through case - only shown once
-  // none of the blocking/status notes above apply. Explains the mechanics,
-  // not a warning - collapsed by default so a repeat visitor isn't shown
-  // the same paragraph on every performance page.
   const getHowMintingWorksNote = (): React.ReactNode => {
-    if (!performance || performance?.serial || performance?.lockedBy) {
-      return null;
-    }
-
-    if (blocked) {
-      return null;
-    }
-
-    if (collectionMintStatus === CollectionMintStatus.PRE && whitelisted) {
-      return null;
-    }
-
-    if (collectionMintStatus && collectionMintStatus !== CollectionMintStatus.ACTIVE) {
-      return null;
-    }
+    if (!isMintable) return null;
 
     const getAttributeTypeLabel = (text: string, className?: string) =>
       <span className={twMerge("font-bold", className)}>{text}</span>;
@@ -824,7 +792,6 @@ export const Performance = (): React.ReactNode => {
     : undefined;
 
   const mintAction = getMintAction();
-  const isMinted = Boolean(performance?.serial);
 
   const getImageAttributeComponents = () => showImageAttributes ? [
       <SectionHeader
@@ -848,7 +815,7 @@ export const Performance = (): React.ReactNode => {
   return (
     <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
-        {getPageNote()}
+        {getInactiveMintNote()}
         <PerformanceHeading
           song={attributes.song}
           date={attributes.date}
