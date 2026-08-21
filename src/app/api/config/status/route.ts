@@ -17,14 +17,13 @@ import { StandardPayload, success } from "@/utils";
 
 export async function GET(): Promise<NextResponse<StandardPayload<AppConfigStatus>>> {
   const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
-  const [config, tokenInfo] = await Promise.all([
+  const treasuryAccountId = getRequired(PublicEnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
+  const [config, treasuryBalance] = await Promise.all([
     getAppConfig(),
-    getMirrorClient().getTokenInfo(hfbCollectionId),
+    getMirrorClient().getTokenBalance(treasuryAccountId, hfbCollectionId),
   ]);
 
   const mintEnabled = Boolean(config?.mintEnabled);
-  const totalSupply = Number(tokenInfo?.total_supply ?? 0);
-  const maxSupply = Number(tokenInfo?.max_supply ?? 0);
 
   return success({
     mintEnabled,
@@ -32,8 +31,7 @@ export async function GET(): Promise<NextResponse<StandardPayload<AppConfigStatu
       mintEnabled,
       config?.launchedAt,
       config?.endedAt,
-      totalSupply,
-      maxSupply
+      treasuryBalance
     ),
   });
 }
