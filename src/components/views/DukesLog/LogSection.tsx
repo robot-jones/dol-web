@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaMinus, FaPlus } from "react-icons/fa";
+import { FaExternalLinkAlt, FaMinus, FaPlus } from "react-icons/fa";
 import {
   MdFirstPage,
   MdLastPage,
@@ -10,6 +10,7 @@ import { twMerge } from "tailwind-merge";
 import { AuditLogData } from "@erikmuir/dol-lib/types";
 import { chunkArray } from "@erikmuir/dol-lib/utils";
 import {
+  getHashScanUrl,
   getPerformanceId,
   sortByTimestampDescending,
 } from "@erikmuir/dol-lib/dapp";
@@ -137,6 +138,7 @@ export const LogSection = ({
         <td className={twMerge(row, header, "w-[25%]")}>Action</td>
         <td className={twMerge(row, header)}>Context</td>
         <td className={twMerge(row, header, "w-[1%]")}></td>
+        <td className={twMerge(row, header, "w-[1%]")}></td>
       </tr>
     );
     rows.push(
@@ -145,6 +147,7 @@ export const LogSection = ({
         const dateTime = `${timestamp.toLocaleDateString("en-US")} ${timestamp
           .toTimeString()
           .slice(0, 8)}`;
+        const { transactionId } = log.context;
         return (
           <tr
             key={index}
@@ -159,6 +162,20 @@ export const LogSection = ({
             </td>
             <td className={twMerge(row, border, monospace)}>
               {log.success ? <SuccessStatusIcon /> : <FailureStatusIcon />}
+            </td>
+            <td className={twMerge(row, border, monospace, "pr-4")}>
+              {transactionId && (
+                <a
+                  href={getHashScanUrl(transactionId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View on HashScan"
+                  aria-label="View on HashScan"
+                  className="text-gray-light hover:text-dol-light"
+                >
+                  <FaExternalLinkAlt size={12} />
+                </a>
+              )}
             </td>
           </tr>
         );

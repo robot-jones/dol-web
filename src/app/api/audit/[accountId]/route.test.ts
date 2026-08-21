@@ -70,6 +70,22 @@ describe("/api/audit/[accountId] POST", () => {
     expect(context).toEqual({ tokenId: "0.0.t" });
   });
 
+  it("keeps transactionId through sanitization so a HashScan link can be built later", async () => {
+    (verifyClientAction as Mock).mockResolvedValueOnce({ accepted: true, success: true });
+    await call("0.0.1", {
+      action: "NFT_PURCHASE",
+      context: {
+        tokenId: "0.0.t",
+        serial: 7,
+        showDate: "1998-07-29",
+        position: 1,
+        transactionId: "0.0.1@1692000000.123456789",
+      },
+    });
+    const [, , context] = (verifyClientAction as Mock).mock.calls[0];
+    expect(context.transactionId).toBe("0.0.1@1692000000.123456789");
+  });
+
   it("caps oversized string context values instead of storing them whole", async () => {
     (verifyClientAction as Mock).mockResolvedValueOnce({ accepted: true, success: true });
     await call("0.0.1", {

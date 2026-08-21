@@ -16,8 +16,8 @@ const CLIENT_ACTIONS: ClientAction[] = ["NFT_PURCHASE", "TOKEN_ASSOCIATE"];
 const hederaIdPattern = /^\d+\.\d+\.\d+$/;
 
 const CONTEXT_KEYS_BY_ACTION: Record<ClientAction, (keyof ActionContext)[]> = {
-  NFT_PURCHASE: ["tokenId", "serial", "showDate", "position", "error"],
-  TOKEN_ASSOCIATE: ["tokenId", "error"],
+  NFT_PURCHASE: ["tokenId", "serial", "showDate", "position", "error", "transactionId"],
+  TOKEN_ASSOCIATE: ["tokenId", "error", "transactionId"],
 };
 
 const sanitizeContext = (action: ClientAction, rawContext: unknown): ActionContext => {

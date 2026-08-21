@@ -103,6 +103,7 @@ class WalletConnectWallet implements WalletInterface {
     const success = txReceipt?.status.toString() === "SUCCESS";
     await auditClient("TOKEN_ASSOCIATE", success, this.getAccountId(), {
       tokenId: tokenId.toString(),
+      transactionId: txResult.transactionId.toString(),
     });
     return success;
   }
@@ -114,11 +115,13 @@ class WalletConnectWallet implements WalletInterface {
     position: number
   ): Promise<boolean> {
     let success = false;
+    let transactionId: string | undefined;
     try {
       const signer = this.getSigner();
       await sleep(1000); // is this needed?
       const signedTx = await tx.signWithSigner(signer);
       const txResult = await signedTx.executeWithSigner(signer);
+      transactionId = txResult.transactionId.toString();
       const txReceipt = await txResult.getReceiptWithSigner(signer);
       success = txReceipt?.status.toString() === "SUCCESS";
     } catch (err) {
@@ -129,6 +132,7 @@ class WalletConnectWallet implements WalletInterface {
         serial: nftId.serial.toNumber(),
         showDate,
         position,
+        transactionId,
       });
     }
     return success;
