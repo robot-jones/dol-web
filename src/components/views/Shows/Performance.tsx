@@ -135,8 +135,8 @@ export const Performance = (): React.ReactNode => {
   const collectionMintStatus = appConfigStatus?.collectionMintStatus;
   const isMinted = Boolean(performance?.serial);
   const isLocked = Boolean(performance?.lockedBy);
-  const isActive = collectionMintStatus === CollectionMintStatus.ACTIVE;
-  const isPresale = collectionMintStatus === CollectionMintStatus.PRE;
+  const isActive = collectionMintStatus === CollectionMintStatus.OPEN;
+  const isPresale = collectionMintStatus === CollectionMintStatus.PRE_SALE;
   const isPerformanceAvailable = performance && !isMinted && !isLocked;
   const isMintable = isPerformanceAvailable && !isBlocked && (isActive || (isPresale && isWhitelisted));
 
@@ -709,7 +709,7 @@ export const Performance = (): React.ReactNode => {
       return { color: "gray", label: "Minting Unavailable" };
     }
     if (!isMintable) {
-      return { color: "gray", label: "Public Mint: TBA" };
+      return { color: "gray", label: "Public Mint: 9/4" };
     }
     return {
       color: "green",
@@ -744,7 +744,7 @@ export const Performance = (): React.ReactNode => {
     if (isPresale && isWhitelisted) {
       return (
         <PageNote color="green" className="text-center">
-          {CollectionMintStatusDisplayText.PRE} But I saw you with a Ticket Stub in your hand, so you&apos;re allowed in early!
+          {CollectionMintStatusDisplayText.PRE_SALE} But I saw you with a Ticket Stub in your hand, so you&apos;re allowed in early!
         </PageNote>
       );
     }
