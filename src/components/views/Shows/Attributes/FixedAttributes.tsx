@@ -1,5 +1,4 @@
 import { PerformanceAttributes, Song } from "@erikmuir/dol-lib/types";
-import { AudioAttribute } from "../AttributeTypes/AudioAttribute";
 import { DataAttribute } from "../AttributeTypes/DataAttribute";
 import { TextAttribute } from "../AttributeTypes";
 
@@ -44,12 +43,15 @@ export const FixedAttributes = ({
 
   return (
     <div className="flex flex-wrap justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
-      <AudioAttribute
+      {/* Playback itself lives in PerformanceAudioPlayer, above the Details
+          disclosure - just the link here, so there's one playable copy of
+          the audio on the page, not two. */}
+      <DataAttribute
         label="MP3"
-        src={attributes.mp3}
+        data={attributes.mp3 && "Link"}
+        href={attributes.mp3}
         loading={trackLoading}
         attributeColor={"blue"}
-        textColor={"green"}
       />
       <DataAttribute
         label="NFT Id"
