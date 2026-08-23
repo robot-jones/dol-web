@@ -80,6 +80,28 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("has no backdrop tint by default", async () => {
+    render(
+      <Modal id="test" show onClose={vi.fn()} ariaLabel="Test modal">
+        content
+      </Modal>
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.parentElement?.parentElement).toHaveClass("bg-transparent");
+    expect(dialog.parentElement?.parentElement).not.toHaveClass("bg-black/75");
+  });
+
+  it("shows a dimmed backdrop when dim is set", async () => {
+    render(
+      <Modal id="test" show dim onClose={vi.fn()} ariaLabel="Test modal">
+        content
+      </Modal>
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.parentElement?.parentElement).toHaveClass("bg-black/75");
+    expect(dialog.parentElement?.parentElement).not.toHaveClass("bg-transparent");
+  });
+
   it("moves focus into the dialog on open and restores it on close (Finding 38)", async () => {
     const trigger = document.createElement("button");
     trigger.textContent = "Open";
