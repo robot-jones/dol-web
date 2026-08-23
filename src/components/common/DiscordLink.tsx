@@ -5,6 +5,8 @@ export type DiscordLinkProps = {
   includeText?: boolean;
 };
 
+const inviteLink = "https://discord.gg/Ubn5XUjRXW";
+
 export const DiscordLink = ({
   sizeInPixels,
   includeText,
@@ -13,7 +15,7 @@ export const DiscordLink = ({
     <div className="flex flex-col items-center justify-center">
       <a
         className="text-[#5865f2] hover:scale-125 duration-500"
-        href="https://discord.gg/WpaDkMxEJ9"
+        href={inviteLink}
         target="_blank"
         rel="noopener noreferrer"
         title="Duke of Lizards Discord"
