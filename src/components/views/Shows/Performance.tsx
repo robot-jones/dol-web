@@ -19,6 +19,7 @@ import {
   ipfsToHttps,
   boldIndicator,
   msToTime,
+  toFriendlyDate,
 } from "@erikmuir/dol-lib/utils";
 import {
   extractBgColor,
@@ -62,6 +63,7 @@ import { openWalletConnectModal } from "@/wallet";
 import { NFTPlaceholder } from "./NFTPlaceholder";
 import { PageNote } from "@/components/common/PageNote";
 import { DolButton } from "@/components/common/DolButton";
+import { Modal } from "@/components/globals/Modal";
 
 // Narrower than PreTransferResponse (whose txBytes is optional) - by the
 // time we ever set preparedTx, serial/txBytes are always populated together.
@@ -95,6 +97,7 @@ export const Performance = (): React.ReactNode => {
   const position = pathParts.at(-1) ?? "";
   const parsedPosition = parseInt(position, 10);
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
+  const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
 
   const [songId, setSongId] = useState<number>();
   const [bgColor, setBgColor] = useState<DolColorHex>(DolColorHex.Dark);
@@ -105,6 +108,11 @@ export const Performance = (): React.ReactNode => {
   const [associateError, setAssociateError] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
+  // Gates the lock/generate/pin pipeline behind an explicit second click -
+  // clicking Mint alone only opens this, nothing backend-side happens until
+  // handleConfirmMint runs. Separate from the wallet's own approval prompt,
+  // which still comes later in performClaim/signAndFinalize.
+  const [showMintConfirm, setShowMintConfirm] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
   // "Am I mid-flow" - set once claimed, cleared once signAndFinalize
   // resolves (Finding 51: fires automatically, no second click).
@@ -370,11 +378,10 @@ export const Performance = (): React.ReactNode => {
     setStatus(newStatus);
   };
 
-  // signAndFinalize fires automatically once this resolves (Finding 51) -
-  // no second click, even though this isn't technically a fresh user
-  // gesture either. getMintButton's "check another window" hint is the
-  // fallback for when the wallet doesn't grab focus on its own.
-  const handleClaimClick = async () => {
+  // Mint pill click - only opens the confirm modal. Nothing backend-side
+  // (locking the performance/serial, generating the image, pinning to
+  // IPFS) happens until the user explicitly confirms - see PUNCHLIST.md.
+  const handleClaimClick = () => {
     if (!pageLoaded || !setlist) {
       return;
     }
@@ -382,7 +389,21 @@ export const Performance = (): React.ReactNode => {
       updateStatus(MintStatusDisplayText.AlreadyMinted);
       return;
     }
+    setShowMintConfirm(true);
+  };
 
+  const handleCancelMintConfirm = () => setShowMintConfirm(false);
+
+  const handleConfirmMint = () => {
+    setShowMintConfirm(false);
+    performClaim();
+  };
+
+  // signAndFinalize fires automatically once this resolves (Finding 51) -
+  // no second click, even though this isn't technically a fresh user
+  // gesture either. getMintButton's "check another window" hint is the
+  // fallback for when the wallet doesn't grab focus on its own.
+  const performClaim = async () => {
     updateStatus(MintStatusDisplayText.Claiming);
 
     // Unhandled throw here used to leave the button disabled forever
@@ -713,7 +734,7 @@ export const Performance = (): React.ReactNode => {
     }
     return {
       color: "green",
-      label: `Mint: ${process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46"} ℏ`,
+      label: `Mint: ${hbarPrice} ℏ`,
       onClick: handleClaimClick,
     };
   };
@@ -865,6 +886,28 @@ export const Performance = (): React.ReactNode => {
         <SectionHeader text="Audit Logs" />
         <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
       </Disclosure>
+
+      <Modal
+        id="mint-confirm"
+        show={showMintConfirm}
+        onClose={handleCancelMintConfirm}
+        title="Confirm Mint"
+        dim
+      >
+        <div className="flex flex-col gap-4 w-64 text-center">
+          <div className="text-balance">
+            You&apos;re about to mint <strong>{attributes.song}</strong>
+            {attributes.date && <> from {toFriendlyDate(attributes.date)}</>} for {hbarPrice} ℏ.
+          </div>
+          <div className="text-xs text-gray-medium">
+            We&apos;ll lock this spot and generate your NFT, then ask you to approve payment in your wallet.
+          </div>
+          <div className="flex flex-col gap-3">
+            <DolButton color="green" fullWidth onClick={handleConfirmMint}>Confirm</DolButton>
+            <DolButton color="gray" outline fullWidth onClick={handleCancelMintConfirm}>Cancel</DolButton>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

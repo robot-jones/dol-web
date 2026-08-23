@@ -14,6 +14,13 @@ export type BaseModalProps = {
   ariaLabel?: string;
   className?: string;
   showClose?: boolean;
+  // Opt-in full-page bg-black/75 backdrop (dropped entirely in Phase 9 -
+  // see PUNCHLIST.md - because the one caller at the time, Wallet.tsx's
+  // account menu, is a low-stakes anchored dropdown that a dimmed backdrop
+  // overstated). A real confirm/cancel dialog is exactly the case that
+  // backdrop signal is for, so it's back as an opt-in rather than reverting
+  // Wallet.tsx's now-correct undimmed look.
+  dim?: boolean;
 };
 
 // Matches the nav tabs' ease-in-out "lowered on a cable" slide (Nav.tsx's
@@ -32,6 +39,7 @@ export const Modal = ({
   ariaLabel,
   className,
   showClose,
+  dim,
   children,
 }: PropsWithChildren<BaseModalProps>) => {
   const [isBrowser, setIsBrowser] = useState(false);
@@ -55,8 +63,21 @@ export const Modal = ({
   useEffect(() => {
     if (show) {
       setMounted(true);
-      const raf = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(raf);
+      // A single rAF isn't a reliable guarantee the browser has actually
+      // painted the just-mounted closed state before we flip to visible -
+      // it can fire early enough that the two style changes get coalesced
+      // into one, so the enter transition never plays (only exit did,
+      // since that flips an already-painted element). Nesting a second rAF
+      // inside the first is the standard fix: the first guarantees we're
+      // past the current paint, the second runs only after that.
+      let inner: number | undefined;
+      const outer = requestAnimationFrame(() => {
+        inner = requestAnimationFrame(() => setVisible(true));
+      });
+      return () => {
+        cancelAnimationFrame(outer);
+        if (inner !== undefined) cancelAnimationFrame(inner);
+      };
     }
     setVisible(false);
     const timeout = setTimeout(() => setMounted(false), CLOSE_ANIMATION_MS);
@@ -112,11 +133,12 @@ export const Modal = ({
         "fixed top-0 left-0",
         "w-full h-full overflow-x-hidden",
         "flex justify-center items-center",
-        // No backdrop tint - a full-page bg-black/75 was sending a "modal"
-        // signal this already-anchored, low-stakes menu doesn't back up
-        // (see PUNCHLIST.md Phase 9). Click-away/Escape still close it;
-        // this fixed layer just isn't visually dimming the page under it.
-        "bg-transparent",
+        // No backdrop tint by default - a full-page bg-black/75 was sending
+        // a "modal" signal the wallet-menu dropdown's already-anchored,
+        // low-stakes case doesn't back up (see PUNCHLIST.md Phase 9).
+        // Click-away/Escape still close it either way; `dim` opts back into
+        // the tint for callers that are an actual modal, not a dropdown.
+        dim ? "bg-black/75" : "bg-transparent",
         className
       )}
     >
@@ -161,7 +183,7 @@ export const Modal = ({
                 <MdClose />
               </button>
             )}
-            <div id={titleId} className="text-xl font-light text-center my-0">{title}</div>
+            <div id={titleId} className="text-xl font-light text-center mt-0 mb-3">{title}</div>
             {children}
           </div>
         </div>
