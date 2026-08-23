@@ -46,6 +46,7 @@ import {
   OtherAttributes,
 } from "@/components/views/Shows/Attributes";
 import { PerformanceHeading } from "@/components/views/Shows/PerformanceHeading";
+import { PerformanceAudioPlayer } from "@/components/views/Shows/PerformanceAudioPlayer";
 import {
   useAccountStatus,
   useAppConfigStatus,
@@ -843,7 +844,14 @@ export const Performance = (): React.ReactNode => {
           set={attributes.set}
           positionInSet={positionInSet}
         />
-        {getImage()}
+        <div className="relative w-full">
+          {getImage()}
+          <PerformanceAudioPlayer
+            src={attributes.mp3}
+            loading={trackLoading}
+            className="absolute top-3 left-3 z-[5]"
+          />
+        </div>
         <MintActionPill
           color={mintAction.color}
           label={mintAction.label}
