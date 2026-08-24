@@ -21,6 +21,13 @@ export const OtherAttributes = ({
   return (
     <div className="flex flex-wrap justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
       <TextAttribute
+        label="Footnote"
+        text={setlist?.footnote}
+        loading={setlistLoading}
+        fullWidth
+        textCentered
+      />
+      <TextAttribute
         label="Jamchart"
         text={setlist?.jamChartDescription}
         loading={setlistLoading}

@@ -1,6 +1,5 @@
 import { PerformanceAttributes, Song } from "@erikmuir/dol-lib/types";
 import { DataAttribute } from "../AttributeTypes/DataAttribute";
-import { TextAttribute } from "../AttributeTypes";
 
 export type FixedAttributesProps = {
   attributes: PerformanceAttributes;
@@ -18,29 +17,6 @@ export const FixedAttributes = ({
   setlistsLoading,
   songLoading,
 }: FixedAttributesProps): React.ReactNode => {
-
-  const getFootnoteAttribute = () => {
-    const footnoteText = attributes.footnote;
-    const hasLongFootnote = footnoteText && footnoteText.length > 32;
-    return hasLongFootnote ? (
-      <TextAttribute
-        label="Footnote"
-        text={footnoteText}
-        loading={setlistLoading}
-        attributeColor={"blue"}
-        fullWidth
-        textCentered
-      />
-    ) : (
-      <DataAttribute
-        label="Footnote"
-        data={footnoteText}
-        loading={setlistLoading}
-        attributeColor={"blue"}
-      />
-    );
-  };
-
   return (
     <div className="flex flex-wrap justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
       {/* Playback itself lives in PerformanceAudioPlayer, above the Details
@@ -157,7 +133,6 @@ export const FixedAttributes = ({
         loading={songLoading}
         attributeColor={"blue"}
       />
-      {getFootnoteAttribute()}
     </div>
   );
 };

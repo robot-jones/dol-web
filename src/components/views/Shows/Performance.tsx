@@ -207,7 +207,6 @@ export const Performance = (): React.ReactNode => {
       newAttributes.country = setlist.country;
       newAttributes.tour = setlist.tourName || setlist.tourWhen;
       newAttributes.gap = setlist.gap;
-      newAttributes.footnote = setlist.footnote;
 
       if (setlists) {
         const prev = setlists.find(
