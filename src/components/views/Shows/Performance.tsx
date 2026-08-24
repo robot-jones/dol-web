@@ -849,7 +849,7 @@ export const Performance = (): React.ReactNode => {
           <PerformanceAudioPlayer
             src={attributes.mp3}
             loading={trackLoading}
-            className="absolute top-3 left-3 z-[5]"
+            className="absolute -top-4 -left-4 z-[5]"
           />
         </div>
         <MintActionPill
