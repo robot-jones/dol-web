@@ -11,12 +11,14 @@ vi.mock("@erikmuir/dol-lib/server/dapp", () => ({
 
 const setPublishedCidsMock = vi.fn();
 const setImageCidMock = vi.fn();
+const confirmMetadataOnChainMock = vi.fn();
 const getPerformanceMock = vi.fn();
 const getAccountMock = vi.fn();
 const getAppConfigMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
   setImageCid: (...a: unknown[]) => setImageCidMock(...a),
+  confirmMetadataOnChain: (...a: unknown[]) => confirmMetadataOnChainMock(...a),
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
@@ -76,6 +78,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     publishNftMetadataMock.mockResolvedValue({ imageCid: "bafy-img-cid", metadataCid: "bafy-cid" });
     setPublishedCidsMock.mockResolvedValue({ success: true });
     setImageCidMock.mockResolvedValue({ success: true });
+    confirmMetadataOnChainMock.mockResolvedValue({ success: true });
     submitNftMetadataUpdateMock.mockResolvedValue(true);
     getPerformanceMock.mockResolvedValue({ lockedAt: 1786300000000 });
     getAccountMock.mockResolvedValue(undefined);
@@ -112,6 +115,32 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
       1,
       "0.0.1"
     );
+  });
+
+  // See PUNCHLIST.md's metadata-reset-on-release finding: this is the
+  // signal releaseClaim uses to know the on-chain call actually succeeded
+  // (metadataCid alone isn't enough - it's written beforehand regardless of
+  // chain outcome), so an abandoned claim past this point gets its serial
+  // reset to the placeholder on release instead of left stale.
+  it("confirms the on-chain metadata update once it succeeds, before building the transfer transaction", async () => {
+    await call("0.0.1", "1998-07-29", "1");
+    expect(confirmMetadataOnChainMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1");
+  });
+
+  it("does not confirm on-chain metadata when the update itself failed", async () => {
+    submitNftMetadataUpdateMock.mockResolvedValue(false);
+    await call("0.0.1", "1998-07-29", "1");
+    expect(confirmMetadataOnChainMock).not.toHaveBeenCalled();
+  });
+
+  it("still builds the transfer transaction even if recording the on-chain confirmation itself fails - the real update already succeeded", async () => {
+    confirmMetadataOnChainMock.mockResolvedValue({ success: false, reason: "ConditionalCheckFailedException" });
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(7);
+    expect(body.data.txBytes).toBeDefined();
   });
 
   // See PUNCHLIST.md: this used to run post-transfer, where a failure here
