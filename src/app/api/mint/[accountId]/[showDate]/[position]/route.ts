@@ -4,7 +4,7 @@ import { PublicEnvKeys, getRequired } from "@erikmuir/dol-lib/env";
 import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
 import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
 import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate, releaseClaim } from "@erikmuir/dol-lib/server/dapp";
-import { setPublishedCids, setImageCid, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
+import { setPublishedCids, setImageCid, confirmMetadataOnChain, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
 import { canMint } from "@/mint-gate";
 
@@ -105,6 +105,15 @@ export async function POST(
     console.error("Failed to submit on-chain metadata update.");
     await releaseClaim(accountId, showDate, parsedPosition, "SYSTEM_FAILURE");
     return success({ serial: SerialErrorResponse.METADATA_PUBLISH_FAILED });
+  }
+
+  // Distinct from setPublishedCids above: this is the signal releaseClaim
+  // uses to know the on-chain call actually succeeded (not just that
+  // metadataCid was published to IPFS), so an abandoned claim past this
+  // point gets its serial reset back to the placeholder on release.
+  const confirmResult = await confirmMetadataOnChain(showDate, parsedPosition, accountId);
+  if (!confirmResult.success) {
+    console.error(`Failed to record on-chain metadata confirmation: ${confirmResult.reason}`);
   }
 
   const client = getHederaClient();
