@@ -261,6 +261,18 @@ export const Performance = (): React.ReactNode => {
     }
   }, [metadata]);
 
+  // Reset the one-way "loaded" latches below when navigating to a
+  // different performance (Finding 59) - this component doesn't remount
+  // on route changes (see randomizedForRef above), so without this,
+  // showImageAttributes/pageLoaded could still read `true` from whatever
+  // performance was on screen before, letting getImage() render a stale
+  // image/attributes for an instant instead of the loading state while
+  // the new performance's own data is still in flight.
+  useEffect(() => {
+    setShowImageAttributes(false);
+    setPageLoaded(false);
+  }, [date, position]);
+
   // Set showImageAttributes and pageLoaded based on loading states
   useEffect(() => {
     if (!showImageAttributes) {
