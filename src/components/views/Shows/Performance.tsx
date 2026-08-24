@@ -127,6 +127,12 @@ export const Performance = (): React.ReactNode => {
   // tab - tells signAndFinalize's later continuation not to touch UI
   // state the user's already moved past.
   const releasedWhilePendingRef = useRef(false);
+  // Which performance (date:position) the auto-randomize effect below has
+  // already run for - keyed rather than a plain boolean since this
+  // component stays mounted across in-app navigation between performances
+  // (same reason PerformanceAudioPlayer resets its own state off `src`
+  // rather than mount).
+  const randomizedForRef = useRef<string | null>(null);
 
   const { setlist, setlistLoading } = useSetlist(date, position);
   const { setlists, setlistsLoading } = useSetlists(date);
@@ -255,6 +261,18 @@ export const Performance = (): React.ReactNode => {
     }
   }, [metadata]);
 
+  // Reset the one-way "loaded" latches below when navigating to a
+  // different performance (Finding 59) - this component doesn't remount
+  // on route changes (see randomizedForRef above), so without this,
+  // showImageAttributes/pageLoaded could still read `true` from whatever
+  // performance was on screen before, letting getImage() render a stale
+  // image/attributes for an instant instead of the loading state while
+  // the new performance's own data is still in flight.
+  useEffect(() => {
+    setShowImageAttributes(false);
+    setPageLoaded(false);
+  }, [date, position]);
+
   // Set showImageAttributes and pageLoaded based on loading states
   useEffect(() => {
     if (!showImageAttributes) {
@@ -308,6 +326,25 @@ export const Performance = (): React.ReactNode => {
     setDonut(randomDonut === randomBgColor ? undefined : randomDonut);
     setSubject(randomSubject);
   };
+
+  // Auto-randomize the customizable attributes for a still-unclaimed
+  // performance, once we actually know it's unclaimed - otherwise every
+  // performance nobody's bothered to customize renders identically
+  // (Dark/Red/Lizard), which undersells the point of a customizable,
+  // collectible NFT. Minted performances are untouched - the metadata
+  // effect above already owns bgColor/donut/subject once real values
+  // exist. Keyed by date:position rather than firing once per mount,
+  // since this component stays mounted across in-app navigation between
+  // performances (see randomizedForRef above).
+  useEffect(() => {
+    if (performanceLoading || !performance) return;
+    const key = `${date}:${position}`;
+    if (randomizedForRef.current === key) return;
+    randomizedForRef.current = key;
+    if (!isMinted) {
+      randomizeAttributes();
+    }
+  }, [date, position, performance, performanceLoading, isMinted]);
 
   const handleRandomizeKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Now that ImageAttributes' randomize control has role="button"
