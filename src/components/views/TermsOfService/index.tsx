@@ -1,4 +1,5 @@
 import { Shapes } from "@/components/common/Shapes";
+import { LEGAL_TERMS_UPDATED } from "@/utils";
 
 export const TermsOfService = (): React.ReactNode => {
   const divider = <div className="border-t border-gray-dark"></div>;
@@ -13,7 +14,7 @@ export const TermsOfService = (): React.ReactNode => {
           <span className="font-bold">Effective Date:</span> 7/15/2025
         </div>
         <div className="text-gray-medium text-center text-xs pt-1">
-          <span className="font-bold">Last Updated:</span> 8/16/2026
+          <span className="font-bold">Last Updated:</span> {LEGAL_TERMS_UPDATED}
         </div>
       </div>
       <div>

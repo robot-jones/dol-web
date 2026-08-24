@@ -59,6 +59,16 @@ export const openWalletConnectModal = async () => {
   });
 };
 
+// Fire-and-forget, same as auditClient - dol-lib's acceptTerms is
+// idempotent per version, so a redundant call here (e.g. a second Agree
+// click racing the first) is a safe no-op server-side, not something this
+// needs to guard against client-side.
+export const acceptTermsClient = async (accountId: string) => {
+  await fetchJson(`/api/account/${accountId}/accept-terms`, {
+    method: "POST",
+  });
+};
+
 export const auditClient = async (
   action: "NFT_PURCHASE" | "TOKEN_ASSOCIATE",
   success: boolean,
