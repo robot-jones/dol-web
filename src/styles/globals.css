@@ -376,6 +376,18 @@ Ensure the default browser behavior of the `hidden` attribute.
 
 /* ===================== END OF CUSTOMIZED PRE-FLIGHT ===================== */
 
+/*
+ * Mobile Chrome/Safari paint a translucent highlight over any tappable
+ * element on touch - most noticeable on custom buttons like
+ * PerformanceAudioPlayer's play/pause toggle. Nothing in this codebase set
+ * an override, so it was showing the browser default everywhere. Suppressed
+ * globally rather than per-element; :hover/:active/:focus-visible styles
+ * already exist wherever they're wanted.
+ */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 audio {
   width: 100%;
   height: 24px;
