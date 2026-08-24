@@ -54,7 +54,13 @@ export class ViewModel {
     this.jumpTo = jumpTo;
     this.countryStates = this.mapCountryStates(showsByVenue);
     this.stateCities = this.countryStates[currentCountry ?? ""] ?? {};
-    this.cityVenues = this.stateCities[currentState ?? ""] ?? {};
+    // Non-USA countries skip the state/province level in the UI (see
+    // listItemType above), but shows are still filed under their real
+    // state/province in stateCities — merge across all of them to get every
+    // city in the country rather than looking up a single (nonexistent) key.
+    this.cityVenues = currentState
+      ? this.stateCities[currentState] ?? {}
+      : this.mergeCityVenues(this.stateCities);
     this.venueShows = this.cityVenues[currentCity ?? ""] ?? {};
     this.shows = this.venueShows[currentVenue ?? ""] ?? [];
     this.shows.sort(this.showsByDate);
@@ -94,15 +100,25 @@ export class ViewModel {
     for (const venue of Object.keys(showsByVenue)) {
       const firstShow = showsByVenue[venue][0];
       const { city, state, country } = firstShow;
-      const stateName = getStateName(state);
+      const stateName = getStateName(state) ?? "";
       if (!countryStates[country]) countryStates[country] = {};
-      if (!countryStates[country][`${stateName}`])
-        countryStates[country][`${stateName}`] = {};
-      if (!countryStates[country][`${stateName}`][city])
-        countryStates[country][`${stateName}`][city] = {};
-      countryStates[country][`${stateName}`][city][venue] = showsByVenue[venue];
+      if (!countryStates[country][stateName])
+        countryStates[country][stateName] = {};
+      if (!countryStates[country][stateName][city])
+        countryStates[country][stateName][city] = {};
+      countryStates[country][stateName][city][venue] = showsByVenue[venue];
     }
     return countryStates;
+  };
+
+  private mergeCityVenues = (stateCities: StateCities): CityVenues => {
+    const merged: CityVenues = {};
+    for (const state of Object.keys(stateCities)) {
+      for (const city of Object.keys(stateCities[state])) {
+        merged[city] = { ...merged[city], ...stateCities[state][city] };
+      }
+    }
+    return merged;
   };
 
   private getShowCountByVenue = (
@@ -121,6 +137,14 @@ export class ViewModel {
   ): number =>
     Object.keys(this.countryStates[country][state][city])
       .map((venue) => this.getShowCountByVenue(country, state, city, venue))
+      .reduce((acc, val) => acc + val, 0);
+
+  // Counts directly from the already-resolved this.cityVenues, so it works
+  // whether that came from a single state (USA) or a merge across states
+  // (non-USA — see mergeCityVenues).
+  private getShowCountForCity = (city: string): number =>
+    Object.keys(this.cityVenues[city])
+      .map((venue) => this.cityVenues[city][venue].length)
       .reduce((acc, val) => acc + val, 0);
 
   private getShowCountByState = (country: string = "", state: string): number =>
@@ -150,7 +174,7 @@ export class ViewModel {
           ])
         : Object.keys(this.cityVenues).map((city) => [
             city,
-            this.getShowCountByCity(this.currentCountry, "", city),
+            this.getShowCountForCity(city),
           ]);
     targets.sort(this.locationsByName);
     return targets;
@@ -168,16 +192,11 @@ export class ViewModel {
   };
 
   private getTargetsForCity = (): LocationShowCount[] => {
+    // this.venueShows is already resolved for the current city, so no need
+    // to re-traverse countryStates by (country, state, city) — which would
+    // fail for non-USA countries, where currentState is never set.
     const targets: LocationShowCount[] = Object.keys(this.venueShows).map(
-      (venue) => [
-        venue,
-        this.getShowCountByVenue(
-          this.currentCountry,
-          this.currentState,
-          this.currentCity,
-          venue
-        ),
-      ]
+      (venue) => [venue, this.venueShows[venue].length]
     );
     targets.sort(this.locationsByName);
     return targets;
