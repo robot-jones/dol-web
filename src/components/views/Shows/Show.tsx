@@ -108,11 +108,15 @@ export const Show = (): React.ReactElement => {
             Setlist Notes
           </div>
           <div>{sanitizeText(show.setlistNotes)}</div>
+          <div className="text-xs text-gray-medium italic">via phish.net</div>
         </div>
       )}
       {reviews && reviews.length > 0 && (
         <div className="flex flex-col items-center gap-8">
-          <div className="text-2xl uppercase tracking-widest">Reviews</div>
+          <div className="flex flex-col items-center">
+            <div className="text-2xl uppercase tracking-widest">Reviews</div>
+            <div className="text-xs text-gray-medium italic">via phish.net</div>
+          </div>
           {reviews.map((review) => (
             <div
               key={review.id}
