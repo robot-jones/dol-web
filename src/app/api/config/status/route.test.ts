@@ -19,18 +19,18 @@ describe("/api/config/status GET", () => {
     getTokenBalanceMock.mockResolvedValue(555);
   });
 
-  it("fails closed (mintEnabled false, PRE) when no config row exists yet", async () => {
+  it("fails closed (mintEnabled false, PRE_SALE) when no config row exists yet", async () => {
     getAppConfigMock.mockResolvedValueOnce(undefined);
     const res = await GET();
     const body = await res.json();
-    expect(body.data).toEqual({ mintEnabled: false, collectionMintStatus: "PRE" });
+    expect(body.data).toEqual({ mintEnabled: false, collectionMintStatus: "PRE_SALE" });
   });
 
-  it("reflects mintEnabled true as ACTIVE", async () => {
+  it("reflects mintEnabled true as OPEN", async () => {
     getAppConfigMock.mockResolvedValueOnce({ id: "global", mintEnabled: true, launchedAt: 1700000000000 });
     const res = await GET();
     const body = await res.json();
-    expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "ACTIVE" });
+    expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "OPEN" });
   });
 
   it("reflects a paused (mintEnabled false, already launched) config row as PAUSED", async () => {
@@ -46,7 +46,7 @@ describe("/api/config/status GET", () => {
     expect(body.data).toEqual({ mintEnabled: false, collectionMintStatus: "PAUSED" });
   });
 
-  it("reflects an ended config row as ENDED, even if mintEnabled was somehow left true", async () => {
+  it("reflects an ended config row as CLOSED, even if mintEnabled was somehow left true", async () => {
     getAppConfigMock.mockResolvedValueOnce({
       id: "global",
       mintEnabled: true,
@@ -55,7 +55,7 @@ describe("/api/config/status GET", () => {
     });
     const res = await GET();
     const body = await res.json();
-    expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "ENDED" });
+    expect(body.data).toEqual({ mintEnabled: true, collectionMintStatus: "CLOSED" });
   });
 
   // Regression test: this used to be driven by on-chain total_supply/
@@ -76,6 +76,6 @@ describe("/api/config/status GET", () => {
     getTokenBalanceMock.mockResolvedValueOnce(554); // one sold, 554 left - not sold out
     const res = await GET();
     const body = await res.json();
-    expect(body.data.collectionMintStatus).toBe("ACTIVE");
+    expect(body.data.collectionMintStatus).toBe("OPEN");
   });
 });
