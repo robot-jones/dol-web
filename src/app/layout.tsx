@@ -8,11 +8,27 @@ import "@/styles/globals.css";
 import { Metadata } from "next";
 import { WalletConnectContextProvider, WalletConnectClient } from "@/wallet";
 
+const title = "Duke of Lizards";
+const description = "A Phish-themed Web3 dApp built on Hedera";
+
 export const metadata: Metadata = {
-  title: "Duke of Lizards",
-  description: "A Phish-themed Web3 dApp built on Hedera",
+  title,
+  description,
   icons: ["/logo.png"],
   manifest: "/manifest.json",
+  metadataBase: new URL("https://app.dukeoflizards.com"),
+  openGraph: {
+    title,
+    description,
+    url: "/",
+    siteName: title,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export default async function RootLayout({
@@ -24,17 +40,6 @@ export default async function RootLayout({
     <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta property="og:title" content="Duke of Lizards" />
-        <meta
-          property="og:description"
-          content="A Phish-themed Web3 dApp built on Hedera"
-        />
-        <meta
-          property="og:image"
-          content="https://app.dukeoflizards.com/dol-preview.png"
-        />
-        <meta property="og:url" content="https://app.dukeoflizards.com" />
-        <meta property="og:type" content="website" />
       </head>
       <body
         className={twMerge(
