@@ -125,7 +125,7 @@ export const Performance = (): React.ReactNode => {
   const { metadata, metadataLoading } = useNftMetadata(hfbCollectionId, performance?.serial);
   const { accountId, walletInterface } = useWalletInterface();
   const { isAssociated, isAssociatedLoading, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
-  const { accountStatus, accountStatusLoading } = useAccountStatus(accountId);
+  const { accountStatus, accountStatusLoading, mutateAccountStatus } = useAccountStatus(accountId);
   const { appConfigStatus } = useAppConfigStatus();
 
   const isWhitelisted = Boolean(accountStatus?.whitelisted);
@@ -595,6 +595,13 @@ export const Performance = (): React.ReactNode => {
     // performance (SWR) doesn't update on its own just because preparedTx
     // did - without this, MintStatusIndicator stayed stuck on stale data.
     mutatePerformance();
+    if (metadataUpdateSuccess) {
+      // A finalized mint is also when the server consumes a whitelisted
+      // account's early access (mint-gate.ts, consumeEarlyMintWhitelist) -
+      // revalidate here so a still-presale second attempt in this tab sees
+      // the real (no longer whitelisted) state instead of a stale cached one.
+      mutateAccountStatus();
+    }
     updateStatus(
       metadataUpdateSuccess
         ? MintStatusDisplayText.MintComplete

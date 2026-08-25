@@ -1,11 +1,13 @@
 const getAccountMock = vi.fn();
 const getAppConfigMock = vi.fn();
+const unwhitelistAccountMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getAccount: (...a: unknown[]) => getAccountMock(...a),
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
+  unwhitelistAccount: (...a: unknown[]) => unwhitelistAccountMock(...a),
 }));
 
-import { canMint } from "@/mint-gate";
+import { canMint, consumeEarlyMintWhitelist } from "@/mint-gate";
 
 describe("canMint", () => {
   beforeEach(() => {
@@ -46,5 +48,33 @@ describe("canMint", () => {
     getAccountMock.mockResolvedValueOnce(undefined);
     getAppConfigMock.mockResolvedValueOnce(undefined);
     expect(await canMint("0.0.1")).toBe(false);
+  });
+});
+
+describe("consumeEarlyMintWhitelist", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    unwhitelistAccountMock.mockResolvedValue({ success: true });
+  });
+
+  it("unwhitelists a whitelisted account that minted before launch", async () => {
+    getAccountMock.mockResolvedValueOnce({ whitelisted: true });
+    getAppConfigMock.mockResolvedValueOnce({ launchedAt: undefined });
+    await consumeEarlyMintWhitelist("0.0.1");
+    expect(unwhitelistAccountMock).toHaveBeenCalledWith("0.0.1");
+  });
+
+  it("does nothing for an account that was never whitelisted", async () => {
+    getAccountMock.mockResolvedValueOnce({ whitelisted: false });
+    getAppConfigMock.mockResolvedValueOnce({ launchedAt: undefined });
+    await consumeEarlyMintWhitelist("0.0.1");
+    expect(unwhitelistAccountMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves a whitelisted account alone once the gate has launched - it no longer bought them anything", async () => {
+    getAccountMock.mockResolvedValueOnce({ whitelisted: true });
+    getAppConfigMock.mockResolvedValueOnce({ launchedAt: 1700000000000 });
+    await consumeEarlyMintWhitelist("0.0.1");
+    expect(unwhitelistAccountMock).not.toHaveBeenCalled();
   });
 });
