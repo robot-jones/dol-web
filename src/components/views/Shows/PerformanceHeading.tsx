@@ -1,4 +1,4 @@
-import { getOrdinalWithSuffix } from "@erikmuir/dol-lib/utils";
+import { getOrdinalWithSuffix, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 
 export type PerformanceHeadingProps = {
   song?: string;
@@ -19,10 +19,13 @@ export const PerformanceHeading = ({
   set,
   positionInSet,
 }: PerformanceHeadingProps): React.ReactNode => {
-  const setDescription = set && positionInSet
-    ? `${set}, ${getOrdinalWithSuffix(positionInSet)} song`
-    : set;
-  const subline = [date, setDescription].filter(Boolean).join(" · ");
+  const parts: string[] = [];
+
+  if (date) parts.push(toFriendlyDate(date));
+  if (set) parts.push(set);
+  if (positionInSet) parts.push(`${getOrdinalWithSuffix(positionInSet)} song`);
+
+  const subline = parts.join(" · ");
 
   return (
     <div className="text-center">
