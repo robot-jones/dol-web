@@ -735,7 +735,7 @@ export const Performance = (): React.ReactNode => {
       };
     }
     if (performance?.serial) {
-      return { color: "red", label: "Already in Someone's Stash" };
+      return { color: "red", label: `Already in Someone's Stash · #${performance.serial}` };
     }
     if (performance?.lockedBy) {
       // Only for your own lock - releasing someone else's is still
