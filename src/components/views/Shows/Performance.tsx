@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { twMerge } from "tailwind-merge";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import {
   CollectionMintStatus,
-  CollectionMintStatusDisplayText,
   DolColorHex,
   MintStatusDisplayText,
   PerformanceAttributes,
@@ -15,12 +12,7 @@ import {
   Subject,
   Uint8ArrayWrapper,
 } from "@erikmuir/dol-lib/types";
-import {
-  ipfsToHttps,
-  boldIndicator,
-  msToTime,
-  toFriendlyDate,
-} from "@erikmuir/dol-lib/utils";
+import { boldIndicator, msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 import {
   extractBgColor,
   extractDonut,
@@ -33,7 +25,6 @@ import {
   subjects,
   getSetText,
 } from "@erikmuir/dol-lib/dapp";
-import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { Disclosure } from "@/components/common/Disclosure";
 import { Loading } from "@/components/common/Loading";
 import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
@@ -41,12 +32,18 @@ import {
   AuditLogsAttribute,
   DynamicAttributes,
   FixedAttributes,
-  ImageAttributes,
   SectionHeader,
   OtherAttributes,
 } from "@/components/views/Shows/Attributes";
 import { PerformanceHeading } from "@/components/views/Shows/PerformanceHeading";
 import { PerformanceAudioPlayer } from "@/components/views/Shows/PerformanceAudioPlayer";
+import { PerformanceImage } from "@/components/views/Shows/PerformanceImage";
+import { LockedForNote } from "@/components/views/Shows/LockedForNote";
+import { MintStatusText } from "@/components/views/Shows/MintStatusText";
+import { InactiveMintNote } from "@/components/views/Shows/InactiveMintNote";
+import { HowMintingWorksNote } from "@/components/views/Shows/HowMintingWorksNote";
+import { ImageAttributesSection } from "@/components/views/Shows/ImageAttributesSection";
+import { CLAIM_PROGRESS_STEPS, CLAIM_PROGRESS_STEP_INTERVAL_MS } from "@/components/views/Shows/mintProgress";
 import {
   useAccountStatus,
   useAppConfigStatus,
@@ -61,8 +58,6 @@ import {
 } from "@/hooks";
 import { fetchStandardJson } from "@/utils";
 import { openWalletConnectModal } from "@/wallet";
-import { NFTPlaceholder } from "./NFTPlaceholder";
-import { PageNote } from "@/components/common/PageNote";
 import { DolButton } from "@/components/common/DolButton";
 import { Modal } from "@/components/globals/Modal";
 
@@ -73,18 +68,6 @@ type PreparedTransfer = {
   txBytes: Uint8ArrayWrapper;
   lockedAt?: number;
 };
-
-// Approximate progress only - the pre-transfer route isn't streaming, so
-// there's no real signal for when each step finishes (Finding 50). Stops
-// advancing at the last message instead of looping.
-const CLAIM_PROGRESS_STEPS = [
-  MintStatusDisplayText.Claiming,
-  "Rendering your NFT image...",
-  "Uploading to IPFS...",
-  "Finalizing on-chain metadata...",
-  "Almost there...",
-] as const;
-const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
 
 // How long to wait for the wallet before showing the "check another
 // window" hint (Finding 51). Confirmed via live testing short enough to
@@ -264,9 +247,9 @@ export const Performance = (): React.ReactNode => {
   // different performance (Finding 59) - this component doesn't remount
   // on route changes (see randomizedForRef above), so without this,
   // showImageAttributes/pageLoaded could still read `true` from whatever
-  // performance was on screen before, letting getImage() render a stale
-  // image/attributes for an instant instead of the loading state while
-  // the new performance's own data is still in flight.
+  // performance was on screen before, letting PerformanceImage render a
+  // stale image/attributes for an instant instead of the loading state
+  // while the new performance's own data is still in flight.
   useEffect(() => {
     setShowImageAttributes(false);
     setPageLoaded(false);
@@ -619,47 +602,6 @@ export const Performance = (): React.ReactNode => {
     );
   };
 
-  const getImage = (): React.ReactNode => {
-    if (metadataLoading || !showImageAttributes) {
-      return (
-        <div className="w-full aspect-square relative">
-          <Loading sizeInPixels={90} />
-        </div>
-      );
-    }
-    return metadata ? (
-      <Image
-        src={ipfsToHttps(metadata.image, process.env.NEXT_PUBLIC_PINATA_GATEWAY)}
-        alt={metadata.name}
-        width={374}
-        height={374}
-        sizes="(min-width: 1024px) 680px, (min-width: 768px) 500px, (min-width: 640px) 448px, 320px"
-        className="shadow-lg cursor-default rounded-2xl border border-gray-dark w-full h-auto"
-        priority
-      />
-    ) : (
-      <NFTPlaceholder
-        song={attributes.song || "Loading..."}
-        performanceId={attributes.performanceId || ""}
-        bgColor={bgColor || DolColorHex.Dark}
-        donut={donut}
-        subject={subject}
-      />
-    );
-  };
-
-  // Elapsed time, not a countdown - the sweep runs on its own schedule
-  // (~15m), so an exact "frees up in Xm" promise could visibly overshoot.
-  // Keep "~15m" in sync with reconcile-claims.js's EXPIRY_MINUTES.
-  const getLockedForNote = (lockedAt?: number): React.ReactNode => {
-    if (!lockedAt) return null;
-    return (
-      <div className="text-xs text-gray-medium">
-        Locked for {msToTime(now - lockedAt)} · auto-releases within ~15m if abandoned
-      </div>
-    );
-  };
-
   // Single source of truth for both the pill's color/label (replacing
   // MintStatusBanner) and whether it's actually clickable (replacing
   // getMintButton) - same branch order/conditions the old getMintButton
@@ -729,7 +671,7 @@ export const Performance = (): React.ReactNode => {
                 </DolButton>
               </>
             )}
-            {getLockedForNote(preparedTx.lockedAt)}
+            <LockedForNote lockedAt={preparedTx.lockedAt} now={now} />
           </div>
         ),
       };
@@ -758,7 +700,7 @@ export const Performance = (): React.ReactNode => {
                 {releasingClaim ? "Releasing..." : "Release"}
               </DolButton>
             )}
-            {getLockedForNote(performance.lockedAt)}
+            <LockedForNote lockedAt={performance.lockedAt} now={now} />
           </div>
         ),
       };
@@ -776,67 +718,6 @@ export const Performance = (): React.ReactNode => {
     };
   };
 
-  const getStatusText = (): React.ReactNode => {
-    if (performanceLoading) return null;
-
-    if (status === MintStatusDisplayText.Claiming) {
-      return (
-        <div className="flex items-center gap-2 text-dol-yellow">
-          <AnimatedDonut sizeInPixels={16} />
-          <span>{CLAIM_PROGRESS_STEPS[claimProgressStep]}</span>
-        </div>
-      );
-    }
-
-    return status !== MintStatusDisplayText.None &&
-      status !== MintStatusDisplayText.AlreadyMinted ? (
-      <div className="text-dol-yellow">{status}</div>
-    ) : null;
-  };
-
-  const getInactiveMintNote = (): React.ReactNode => {
-    if (!collectionMintStatus || !isPerformanceAvailable || isBlocked || isActive) {
-      return null;
-    }
-
-    if (isPresale && isWhitelisted) {
-      return (
-        <PageNote color="green" className="text-center">
-          {CollectionMintStatusDisplayText.PRE_SALE} But I saw you with a Ticket Stub in your hand, so you&apos;re allowed in early!
-        </PageNote>
-      );
-    }
-
-    return (
-      <PageNote color="red" className="text-center">
-        {CollectionMintStatusDisplayText[collectionMintStatus]}
-      </PageNote>
-    );
-  };
-
-  const getHowMintingWorksNote = (): React.ReactNode => {
-    if (!isMintable) return null;
-
-    const getAttributeTypeLabel = (text: string, className?: string) =>
-      <span className={twMerge("font-bold", className)}>{text}</span>;
-
-    const customizable = getAttributeTypeLabel("Customizable", "text-dol-yellow");
-    const fixed = getAttributeTypeLabel("Fixed", "text-dol-blue");
-    const dynamic = getAttributeTypeLabel("Dynamic", "text-dol-green");
-    const other = getAttributeTypeLabel("Other", "text-gray-medium");
-
-    return (
-      <Disclosure summary="How minting works" variant="subtle">
-        <div className="text-justify pt-2">
-          Feel free to modify or randomize the {customizable} attributes to your liking! When you mint,{" "}
-          they&apos;ll be written to the NFT&apos;s metadata on chain, along with the {fixed} attributes{" "}
-          — <em>including the MP3 link!</em> ({dynamic} and {other} attributes will not be written on chain,{" "}
-          but can still be viewed on this page.)
-        </div>
-      </Disclosure>
-    );
-  };
-
   if (setlistLoading) {
     return <Loading sizeInPixels={90} showLyric />;
   }
@@ -851,29 +732,29 @@ export const Performance = (): React.ReactNode => {
 
   const mintAction = getMintAction();
 
-  const getImageAttributeComponents = () => showImageAttributes ? [
-      <SectionHeader
-        text="Customizable NFT Attributes"
-        key="custom-nft-attributes-section-header"
-      />,
-      <ImageAttributes
-        key="custom-nft-attributes-section"
-        bgColor={bgColor}
-        donut={donut}
-        subject={subject}
-        minted={isMinted}
-        handleBgColorChanged={handleBgColorChanged}
-        handleDonutChanged={handleDonutChanged}
-        handleSubjectChanged={handleSubjectChanged}
-        handleRandomizeClick={handleRandomizeClick}
-        handleRandomizeKeyDown={handleRandomizeKeyDown}
-      />
-    ] : [];
+  const imageAttributesProps = {
+    bgColor,
+    donut,
+    subject,
+    minted: isMinted,
+    handleBgColorChanged,
+    handleDonutChanged,
+    handleSubjectChanged,
+    handleRandomizeClick,
+    handleRandomizeKeyDown,
+  };
 
   return (
     <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mt-4 mx-auto flex flex-col">
       <div className="flex flex-col items-center gap-4 w-full">
-        {getInactiveMintNote()}
+        <InactiveMintNote
+          collectionMintStatus={collectionMintStatus}
+          isPerformanceAvailable={Boolean(isPerformanceAvailable)}
+          isBlocked={isBlocked}
+          isActive={isActive}
+          isPresale={isPresale}
+          isWhitelisted={isWhitelisted}
+        />
         <PerformanceHeading
           song={attributes.song}
           date={attributes.date}
@@ -881,7 +762,15 @@ export const Performance = (): React.ReactNode => {
           positionInSet={positionInSet}
         />
         <div className="relative w-full">
-          {getImage()}
+          <PerformanceImage
+            loading={metadataLoading || !showImageAttributes}
+            metadata={metadata}
+            song={attributes.song}
+            performanceId={attributes.performanceId}
+            bgColor={bgColor}
+            donut={donut}
+            subject={subject}
+          />
           <PerformanceAudioPlayer
             src={attributes.mp3}
             loading={trackLoading}
@@ -894,15 +783,19 @@ export const Performance = (): React.ReactNode => {
           onClick={mintAction.onClick}
         />
         {mintAction.extra}
-        {getStatusText()}
+        <MintStatusText
+          performanceLoading={performanceLoading}
+          status={status}
+          claimProgressStep={claimProgressStep}
+        />
       </div>
 
-      {getHowMintingWorksNote()}
+      <HowMintingWorksNote isMintable={Boolean(isMintable)} />
 
-      {!isMinted && [...getImageAttributeComponents()]}
+      <ImageAttributesSection show={showImageAttributes && !isMinted} {...imageAttributesProps} />
 
       <Disclosure summary="Details">
-        {isMinted && [...getImageAttributeComponents()]}
+        <ImageAttributesSection show={showImageAttributes && isMinted} {...imageAttributesProps} />
 
         <SectionHeader text="Fixed NFT Attributes" />
         <FixedAttributes
