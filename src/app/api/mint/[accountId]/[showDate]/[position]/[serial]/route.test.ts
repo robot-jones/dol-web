@@ -2,11 +2,13 @@ const getPerformanceMock = vi.fn();
 const setSerialMock = vi.fn();
 const getAccountMock = vi.fn();
 const getAppConfigMock = vi.fn();
+const unwhitelistAccountMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   setSerial: (...a: unknown[]) => setSerialMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
+  unwhitelistAccount: (...a: unknown[]) => unwhitelistAccountMock(...a),
 }));
 
 import { POST } from "./route";
@@ -24,6 +26,7 @@ describe("/api/mint/[accountId]/[showDate]/[position]/[serial] POST", () => {
     vi.clearAllMocks();
     getAccountMock.mockResolvedValue(undefined);
     getAppConfigMock.mockResolvedValue({ mintEnabled: true });
+    unwhitelistAccountMock.mockResolvedValue({ success: true });
   });
 
   it("rejects a blocked account even though minting is globally enabled", async () => {
@@ -67,5 +70,23 @@ describe("/api/mint/[accountId]/[showDate]/[position]/[serial] POST", () => {
     const body = await res.json();
     expect(body.data).toBe(true);
     expect(setSerialMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1", 7);
+  });
+
+  // Whitelisting buys exactly one early mint - see mint-gate.test.ts for
+  // the full presale/launched matrix, this just confirms the route wires
+  // it in on both the success paths.
+  it("consumes a whitelisted account's early access once the sale finalizes", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getPerformanceMock.mockResolvedValue({ lockedSerial: 7, lockedBy: "0.0.1", metadataCid: "Qm" });
+    setSerialMock.mockResolvedValue({ success: true });
+    await call("0.0.1", "1998-07-29", "1", "7");
+    expect(unwhitelistAccountMock).toHaveBeenCalledWith("0.0.1");
+  });
+
+  it("also consumes it on a retried call that hits the already-finalized shortcut", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getPerformanceMock.mockResolvedValue({ serial: 7, lockedBy: "0.0.1" });
+    await call("0.0.1", "1998-07-29", "1", "7");
+    expect(unwhitelistAccountMock).toHaveBeenCalledWith("0.0.1");
   });
 });

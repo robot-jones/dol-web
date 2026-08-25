@@ -8,7 +8,7 @@ import { fetchStandardJson } from "@/utils";
 // var read with a fetch against real account state.
 export function useAccountStatus(accountId?: string | null) {
   const url = accountId ? `/api/account/${accountId}/status` : null;
-  const { data, isLoading, error } = useSWR<AccountStatus>(
+  const { data, isLoading, error, mutate } = useSWR<AccountStatus>(
     url,
     fetchStandardJson
   );
@@ -16,5 +16,6 @@ export function useAccountStatus(accountId?: string | null) {
     accountStatus: data,
     accountStatusLoading: isLoading,
     accountStatusError: error,
+    mutateAccountStatus: mutate,
   };
 }

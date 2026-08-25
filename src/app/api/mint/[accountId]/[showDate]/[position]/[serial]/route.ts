@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPerformance, setSerial } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
-import { canMint } from "@/mint-gate";
+import { canMint, consumeEarlyMintWhitelist } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position]/[serial] (post-transfer endpoint)
 //
@@ -34,7 +34,10 @@ export async function POST(
 
   // Already finalized by an earlier attempt at this exact call - nothing
   // left to do, so this is safe to report as success without redoing work.
+  // Still worth consuming the whitelist here too, in case the first
+  // attempt's response never made it back to the client.
   if (performance?.serial === parsedSerial && performance.lockedBy === accountId) {
+    await consumeEarlyMintWhitelist(accountId);
     return success(true);
   }
 
@@ -67,6 +70,8 @@ export async function POST(
     );
     return success(false);
   }
+
+  await consumeEarlyMintWhitelist(accountId);
 
   return success(true);
 }
