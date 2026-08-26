@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { notFound, usePathname } from "next/navigation";
 import { Setlist } from "@erikmuir/dol-lib/types";
 import { getSetText, sortByPosition } from "@erikmuir/dol-lib/dapp";
 import { daysUntil, toFriendlyDate, toFriendlyDateTime, sanitizeText } from "@erikmuir/dol-lib/utils";
@@ -36,7 +36,7 @@ export const Show = (): React.ReactElement => {
   }
 
   if (!setlists || setlists.length === 0) {
-    return <Error code={404} message="Show not found" />;
+    notFound();
   }
 
   const getShowHeader = (): React.ReactNode => {
