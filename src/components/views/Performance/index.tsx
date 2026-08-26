@@ -2,18 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import {
-  CollectionMintStatus,
-  DolColorHex,
-  MintStatusDisplayText,
-  PerformanceAttributes,
-  PreTransferResponse,
-  SerialErrorResponse,
-  SetlistLine,
-  Subject,
-  Uint8ArrayWrapper,
-} from "@erikmuir/dol-lib/types";
-import { boldIndicator, msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
-import {
   extractBgColor,
   extractDonut,
   extractSubject,
@@ -25,25 +13,39 @@ import {
   subjects,
   getSetText,
 } from "@erikmuir/dol-lib/dapp";
+import {
+  CollectionMintStatus,
+  DolColorHex,
+  MintStatusDisplayText,
+  PerformanceAttributes,
+  PreTransferResponse,
+  SerialErrorResponse,
+  SetlistLine,
+  Subject,
+  Uint8ArrayWrapper,
+} from "@erikmuir/dol-lib/types";
+import { boldIndicator, msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 import { Disclosure } from "@/components/common/Disclosure";
+import { DolButton } from "@/components/common/DolButton";
 import { Loading } from "@/components/common/Loading";
 import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
+import { Modal } from "@/components/globals/Modal";
 import {
   AuditLogsAttribute,
   DynamicAttributes,
   FixedAttributes,
   SectionHeader,
   OtherAttributes,
-} from "@/components/views/Shows/Attributes";
-import { PerformanceHeading } from "@/components/views/Shows/PerformanceHeading";
-import { PerformanceAudioPlayer } from "@/components/views/Shows/PerformanceAudioPlayer";
-import { PerformanceImage } from "@/components/views/Shows/PerformanceImage";
-import { LockedForNote } from "@/components/views/Shows/LockedForNote";
-import { MintStatusText } from "@/components/views/Shows/MintStatusText";
-import { InactiveMintNote } from "@/components/views/Shows/InactiveMintNote";
-import { HowMintingWorksNote } from "@/components/views/Shows/HowMintingWorksNote";
-import { ImageAttributesSection } from "@/components/views/Shows/ImageAttributesSection";
-import { CLAIM_PROGRESS_STEPS, CLAIM_PROGRESS_STEP_INTERVAL_MS } from "@/components/views/Shows/mintProgress";
+} from "@/components/views/Performance/AttributeSections";
+import { HowMintingWorksNote } from "@/components/views/Performance/HowMintingWorksNote";
+import { ImageAttributesSection } from "@/components/views/Performance/ImageAttributesSection";
+import { InactiveMintNote } from "@/components/views/Performance/InactiveMintNote";
+import { LockedForNote } from "@/components/views/Performance/LockedForNote";
+import { CLAIM_PROGRESS_STEPS, CLAIM_PROGRESS_STEP_INTERVAL_MS } from "@/components/views/Performance/mintProgress";
+import { MintStatusText } from "@/components/views/Performance/MintStatusText";
+import { PerformanceAudioPlayer } from "@/components/views/Performance/PerformanceAudioPlayer";
+import { PerformanceHeading } from "@/components/views/Performance/PerformanceHeading";
+import { PerformanceImage } from "@/components/views/Performance/PerformanceImage";
 import {
   useAccountStatus,
   useAppConfigStatus,
@@ -58,8 +60,6 @@ import {
 } from "@/hooks";
 import { fetchStandardJson } from "@/utils";
 import { openWalletConnectModal } from "@/wallet";
-import { DolButton } from "@/components/common/DolButton";
-import { Modal } from "@/components/globals/Modal";
 
 // Narrower than PreTransferResponse (whose txBytes is optional) - by the
 // time we ever set preparedTx, serial/txBytes are always populated together.

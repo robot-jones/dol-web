@@ -1,4 +1,4 @@
-import { ImageAttributes, ImageAttributesProps, SectionHeader } from "@/components/views/Shows/Attributes";
+import { ImageAttributes, ImageAttributesProps, SectionHeader } from "@/components/views/Performance/AttributeSections";
 
 export type ImageAttributesSectionProps = ImageAttributesProps & {
   show: boolean;
