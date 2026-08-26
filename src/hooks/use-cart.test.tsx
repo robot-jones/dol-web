@@ -4,8 +4,8 @@ import { useCart } from "./use-cart";
 
 const renderUseCart = () => renderHook(() => useCart(), { wrapper: CartContextProvider });
 
-const item1 = { showDate: "1998-07-29", position: 1, serial: 7, lockedAt: 1786300000000 };
-const item2 = { showDate: "1998-07-29", position: 2, serial: 8 };
+const item1 = { showDate: "1998-07-29", position: 1, serial: 7, song: "Runaway Jim", lockedAt: 1786300000000 };
+const item2 = { showDate: "1998-07-29", position: 2, serial: 8, song: "Wilson" };
 
 describe("useCart", () => {
   beforeEach(() => {
@@ -54,14 +54,14 @@ describe("useCart", () => {
 
     act(() => {
       for (let position = 1; position <= 10; position++) {
-        result.current.addItem({ showDate: "1998-07-29", position, serial: position });
+        result.current.addItem({ showDate: "1998-07-29", position, serial: position, song: `Song ${position}` });
       }
     });
     expect(result.current.items).toHaveLength(10);
 
     let added: boolean | undefined;
     act(() => {
-      added = result.current.addItem({ showDate: "1998-07-29", position: 11, serial: 11 });
+      added = result.current.addItem({ showDate: "1998-07-29", position: 11, serial: 11, song: "Song 11" });
     });
 
     expect(added).toBe(false);

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { twMerge } from "tailwind-merge";
 import { DiscordLink } from "../common/DiscordLink";
 import { Shapes } from "../common/Shapes";
+import { Bag } from "./Bag";
 import { Nav } from "./Nav";
 import { Wallet } from "./Wallet";
 
@@ -50,6 +51,7 @@ export const Header = () => {
         <div className="[grid-area:nav] px-2 pt-2 pb-8 min-[900px]:py-2"><Nav /></div>
         <div className="[grid-area:actions] pr-2 flex items-center justify-end gap-2">
           <DiscordLink sizeInPixels={24} />
+          <Bag />
           <Wallet />
         </div>
       </div>
