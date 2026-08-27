@@ -6,9 +6,11 @@ import { CartItem } from "./types";
 const STORAGE_KEY = "dol-cart";
 // Hedera Token Service's own per-transfer NFT limit - matches
 // MAX_CONCURRENT_LOCKS in dol-lib's claimPerformance and the checkout
-// endpoint's own MAX_CHECKOUT_ITEMS, checked again here so the "Add to
-// Bag" button can refuse locally instead of only failing at checkout.
-const MAX_CART_ITEMS = 10;
+// endpoint's own MAX_CHECKOUT_ITEMS. Exported so the "Add to Bag" button
+// (Performance.tsx) can refuse locally, before ever calling prepare,
+// instead of claiming a real performance server-side only to have nowhere
+// local to put it.
+export const MAX_CART_ITEMS = 10;
 
 export type CartContextValue = {
   items: CartItem[];
