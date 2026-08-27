@@ -7,7 +7,6 @@ import {
   LedgerId,
   TokenAssociateTransaction,
   TokenId,
-  NftId,
   Transaction,
 } from "@hashgraph/sdk";
 import {
@@ -120,10 +119,10 @@ class WalletConnectWallet implements WalletInterface {
 
   // AC/DC Bag checkout - one TransferTransaction covering every item in
   // the bag at once. The sign/execute/receipt call itself doesn't care how
-  // many transfer legs are in tx (same as purchaseNft below); the only
-  // real difference is the audit log, which needs one NFT_PURCHASE entry
-  // per item rather than the single tokenId/serial/showDate/position a
-  // single-item transaction carries.
+  // many transfer legs are in tx - the real work is the audit log, which
+  // needs one NFT_PURCHASE entry per item rather than a single
+  // tokenId/serial/showDate/position (replaced the old single-item
+  // purchaseNft, CART.md).
   async purchaseNfts(
     tx: Transaction,
     items: PurchaseNftItem[]
@@ -155,37 +154,6 @@ class WalletConnectWallet implements WalletInterface {
           })
         )
       );
-    }
-    return success;
-  }
-
-  /** @deprecated use purchaseNfts - kept only until Performance.tsx's single-item flow is retired (CART.md) */
-  async purchaseNft(
-    tx: Transaction,
-    nftId: NftId,
-    showDate: string,
-    position: number
-  ): Promise<boolean> {
-    let success = false;
-    let transactionId: string | undefined;
-    try {
-      const signer = this.getSigner();
-      await sleep(1000); // is this needed?
-      const signedTx = await tx.signWithSigner(signer);
-      const txResult = await signedTx.executeWithSigner(signer);
-      transactionId = txResult.transactionId.toString();
-      const txReceipt = await txResult.getReceiptWithSigner(signer);
-      success = txReceipt?.status.toString() === "SUCCESS";
-    } catch (err) {
-      console.error("Failed transfer transaction:", err);
-    } finally {
-      await auditClient("NFT_PURCHASE", success, this.getAccountId(), {
-        tokenId: nftId.tokenId.toString(),
-        serial: nftId.serial.toNumber(),
-        showDate,
-        position,
-        transactionId,
-      });
     }
     return success;
   }
