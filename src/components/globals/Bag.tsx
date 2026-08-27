@@ -5,6 +5,7 @@ import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 import { CartItem } from "@/cart";
+import { useAccountStatus } from "@/hooks/use-account-status";
 import { useCart } from "@/hooks/use-cart";
 import { useWalletInterface } from "@/hooks/use-wallet-interface";
 import { fetchStandardJson } from "@/utils";
@@ -20,6 +21,7 @@ export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const { items, removeItem } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
+  const { mutateAccountStatus } = useAccountStatus(accountId);
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [checkingOut, setCheckingOut] = useState(false);
@@ -139,6 +141,13 @@ export const Bag = () => {
         }
         removeItem(item.showDate, item.position);
       }
+      // A finalized mint is also when the server consumes a whitelisted
+      // account's early access (mint-gate.ts, consumeEarlyMintWhitelist) -
+      // revalidate here so a still-presale second Add to Bag in this tab
+      // sees the real (no longer whitelisted) state instead of a stale
+      // cached one. Performance.tsx's old single-item flow did this same
+      // revalidation at the equivalent point (CART.md: known gap, now fixed).
+      mutateAccountStatus();
     } catch (err) {
       console.error("Checkout request failed:", err);
       setNotice("Something went wrong starting checkout. Please try again.");

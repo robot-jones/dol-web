@@ -14,6 +14,11 @@ vi.mock("@/hooks/use-wallet-interface", () => ({
   useWalletInterface: () => useWalletInterfaceMock(),
 }));
 
+const mutateAccountStatus = vi.fn();
+vi.mock("@/hooks/use-account-status", () => ({
+  useAccountStatus: () => ({ mutateAccountStatus }),
+}));
+
 // PageNote (rendered by Bag itself) also imports from @/utils - mock only
 // fetchStandardJson, keep everything else real.
 vi.mock("@/utils", async (importOriginal) => ({
@@ -43,6 +48,7 @@ const rawTxBytes = { type: "Buffer" as const, data: [1, 2, 3] };
 beforeEach(() => {
   sessionStorage.clear();
   purchaseNfts.mockReset();
+  mutateAccountStatus.mockReset();
   useWalletInterfaceMock.mockReset().mockReturnValue({
     accountId: "0.0.1",
     walletInterface: { purchaseNfts },
@@ -209,6 +215,27 @@ describe("Bag", () => {
         `/api/mint/0.0.1/${item2.showDate}/${item2.position}/${item2.serial}`,
         { method: "POST" }
       );
+      // Regression (CART.md "known gap"): Performance.tsx's old single-item
+      // flow used to revalidate account status right after finalize, so a
+      // still-presale second attempt in the same tab would see updated
+      // whitelist status. Finalize moved here on the hard cutover - this
+      // is what keeps that same revalidation happening.
+      expect(mutateAccountStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not revalidate account status when nothing actually got purchased", async () => {
+      vi.mocked(fetchStandardJson).mockResolvedValue({
+        txBytes: rawTxBytes,
+        confirmed: [{ showDate: item1.showDate, position: item1.position }],
+        expired: [],
+      });
+      purchaseNfts.mockResolvedValue(false);
+
+      render(<Seeded items={[item1]} />);
+      clickCheckout();
+
+      await screen.findByText(/didn't confirm the transaction/);
+      expect(mutateAccountStatus).not.toHaveBeenCalled();
     });
 
     // Erik's call (CART.md): a declined/failed signature leaves the bag
