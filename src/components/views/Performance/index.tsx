@@ -120,18 +120,31 @@ export const Performance = (): React.ReactNode => {
     }
   }, [setlist]);
 
-  // Ticks `now` while this performance is locked (by anyone, including a
-  // claim just added to this account's bag), so the elapsed-time note
-  // stays live without needing a network refetch - lockedAt is a fixed
-  // timestamp, only "now" needs to move. Driven entirely by
-  // performance?.lockedBy now (SWR) - there's no separate in-flight local
-  // state to also check the way preparedTx used to, since "Add to Bag"
-  // has nothing left to do once the prepare call itself resolves.
+  // Ticks `now` while this performance is locked (by anyone) or in this
+  // account's own bag, so the elapsed-time note stays live without
+  // needing a network refetch - lockedAt is a fixed timestamp, only "now"
+  // needs to move.
+  //
+  // Bug fixed 2026-08-27: this used to gate on performance?.lockedBy
+  // (SWR) alone, but getMintAction's bagEntry branch (instant cart state)
+  // can start rendering LockedForNote before SWR ever refetches - nothing
+  // in the instant-add flow calls mutatePerformance any more, so
+  // performance?.lockedBy could stay stale indefinitely. That left `now`
+  // stuck at whatever it was when the component mounted while
+  // bagEntry.lockedAt was a fresh server timestamp, so `now - lockedAt`
+  // came out negative ("Locked for -1:-16") until SWR happened to
+  // revalidate on its own - which might be a while, or never, while the
+  // tab stays open. Gating on bagEntry too, and setting `now` immediately
+  // when the effect (re)starts rather than waiting for the first 1s tick,
+  // closes both the "SWR never caught up" gap and the general "now was
+  // already stale before this effect even started" gap.
+  const isInBag = Boolean(bagEntry);
   useEffect(() => {
-    if (!performance?.lockedBy) return;
+    if (!performance?.lockedBy && !isInBag) return;
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [performance?.lockedBy]);
+  }, [performance?.lockedBy, isInBag]);
 
   // Update performance attributes when sources change
   useEffect(() => {

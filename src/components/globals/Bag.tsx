@@ -37,8 +37,15 @@ export const Bag = () => {
   // closed modal's contents once a second. Also drives each pending item's
   // displayed progress step (derived from addedAt, not a separately
   // mutated counter - see getProgressStepIndex).
+  // Same staleness bug as Performance.tsx's equivalent effect (CART.md,
+  // fixed 2026-08-27): without this immediate set, `now` stays at
+  // whatever it was when Bag last rendered (possibly since page load, if
+  // the bag had been closed the whole time an item was added) until the
+  // first 1s tick - if that's earlier than a just-added item's lockedAt,
+  // `now - lockedAt` briefly comes out negative right when the bag opens.
   useEffect(() => {
     if (!open) return undefined;
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [open]);

@@ -129,6 +129,31 @@ describe("Bag", () => {
     expect(screen.getByText("Wilson")).toBeInTheDocument();
   });
 
+  // Regression: reported live as "Locked for -1:-16 · auto-releases...".
+  // `now` only gets refreshed once the ticking effect (re)starts, gated
+  // on `open` - if an item's real lockedAt is later than whatever `now`
+  // was left at while the bag was closed (e.g. it was added minutes after
+  // the bag last rendered), the very first render after opening used the
+  // stale `now`, and now - lockedAt came out negative. Fixed by setting
+  // now immediately when the effect starts instead of waiting for the
+  // first 1s tick.
+  it("does not show a negative elapsed time for an item locked after the bag last rendered", () => {
+    vi.useFakeTimers();
+    try {
+      const mountTime = Date.now();
+      const lockedAfterMount = mountTime + 65_000;
+      render(<Seeded items={[{ ...item1, lockedAt: lockedAfterMount }]} />);
+
+      vi.setSystemTime(lockedAfterMount + 5_000);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.queryByText(/Locked for -/)).not.toBeInTheDocument();
+      expect(screen.getByText("Locked for 00:05")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("removes a ready item via its Remove button", () => {
     render(<Seeded items={[item1, item2]} />);
     fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
