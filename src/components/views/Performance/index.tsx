@@ -26,6 +26,7 @@ import { Disclosure } from "@/components/common/Disclosure";
 import { DolButton } from "@/components/common/DolButton";
 import { Loading } from "@/components/common/Loading";
 import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
+import { Modal } from "@/components/globals/Modal";
 import {
   AuditLogsAttribute,
   DynamicAttributes,
@@ -60,6 +61,12 @@ import { fetchStandardJson } from "@/utils";
 import { openWalletConnectModal } from "@/wallet";
 import type { ServerPrepareResponse } from "@/app/api/mint/[accountId]/[showDate]/[position]/prepare/route";
 
+// AC/DC Bag intro modal (CART.md): shown once ever per browser, not once
+// per empty bag - localStorage rather than sessionStorage, since the
+// explanation itself never goes stale the way cart items can (that's
+// specifically why cart state uses sessionStorage instead).
+const BAG_INTRO_SEEN_KEY = "dol-bag-intro-seen";
+
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
   const pathParts = pathname.split("/");
@@ -77,6 +84,7 @@ export const Performance = (): React.ReactNode => {
   const [status, setStatus] = useState<MintStatusDisplayText>(MintStatusDisplayText.None);
   const [associateError, setAssociateError] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [showBagIntro, setShowBagIntro] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
   const [now, setNow] = useState<number>(Date.now());
   // Index into CLAIM_PROGRESS_STEPS - still relevant under the AC/DC Bag
@@ -375,10 +383,10 @@ export const Performance = (): React.ReactNode => {
   // this is now the only purchase-adjacent action a performance page
   // offers. Claims and publishes exactly like the old flow did, but stops
   // there - no wallet signature happens on this page any more, that's
-  // Checkout's job (Bag.tsx), once per bag rather than once per item. No
-  // confirmation gate here (the old "Confirm Mint" modal moved to
-  // Checkout instead) - a separate explainer-modal idea is tracked in
-  // CART.md but not part of this pass.
+  // Checkout's job (Bag.tsx), once per bag rather than once per item. The
+  // old "Confirm Mint" modal moved to Checkout instead - what gates this
+  // click now is the one-time bag-intro modal below, not a per-click
+  // confirmation.
   const handleAddToBagClick = () => {
     if (!pageLoaded || !setlist) {
       return;
@@ -392,6 +400,31 @@ export const Performance = (): React.ReactNode => {
     if (bagItems.length >= MAX_CART_ITEMS) {
       updateStatus(MintStatusDisplayText.TooManyLocked);
       return;
+    }
+    // Only gated the very first time ever, per browser - not re-checked
+    // against current bag contents, so it can't get re-triggered just
+    // because someone emptied their bag out via a completed checkout.
+    let seenIntro = true;
+    try {
+      seenIntro = Boolean(localStorage.getItem(BAG_INTRO_SEEN_KEY));
+    } catch (err) {
+      console.error("Failed to read bag-intro-seen flag:", err);
+    }
+    if (seenIntro) {
+      addToBag();
+    } else {
+      setShowBagIntro(true);
+    }
+  };
+
+  const handleBagIntroCancel = () => setShowBagIntro(false);
+
+  const handleBagIntroOk = () => {
+    setShowBagIntro(false);
+    try {
+      localStorage.setItem(BAG_INTRO_SEEN_KEY, "true");
+    } catch (err) {
+      console.error("Failed to persist bag-intro-seen flag:", err);
     }
     addToBag();
   };
@@ -674,6 +707,27 @@ export const Performance = (): React.ReactNode => {
 
       {/* The old "Confirm Mint" modal used to live here - moved to the Bag's
           Checkout button instead (CART.md, not yet built as of this pass). */}
+
+      <Modal
+        id="bag-intro"
+        show={showBagIntro}
+        onClose={handleBagIntroCancel}
+        title="Your AC/DC Bag"
+        dim
+      >
+        <div className="flex flex-col gap-4 w-64 text-center">
+          <div className="text-balance">
+            Add up to 10 performances to your bag, then check out once to mint them all together.
+          </div>
+          <div className="text-xs text-gray-medium">
+            Adding something to your bag locks it and starts generating your NFT right away, so it&apos;s reserved for you. If you don&apos;t check out, it auto-releases within ~15m.
+          </div>
+          <div className="flex flex-col gap-3">
+            <DolButton color="green" fullWidth onClick={handleBagIntroOk}>OK</DolButton>
+            <DolButton color="gray" outline fullWidth onClick={handleBagIntroCancel}>Cancel</DolButton>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
