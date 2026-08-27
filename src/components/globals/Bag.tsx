@@ -33,7 +33,7 @@ export const Bag = () => {
         type="button"
         aria-label="AC/DC Bag"
         onClick={handleBagClick}
-        className="relative p-1 text-dol-light hover:text-white duration-500"
+        className="relative p-1 bg-transparent border-0 text-dol-light hover:text-white duration-500"
       >
         <MdShoppingBag size={24} />
         {items.length > 0 && (
