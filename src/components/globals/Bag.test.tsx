@@ -1,11 +1,24 @@
 import { useEffect } from "react";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { CartContextProvider, CartItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
+import { fetchStandardJson } from "@/utils";
 import { Bag } from "./Bag";
 
 const item1: CartItem = { showDate: "1998-07-29", position: 1, serial: 7, song: "Runaway Jim", lockedAt: Date.now() };
 const item2: CartItem = { showDate: "1998-07-29", position: 2, serial: 8, song: "Wilson" };
+
+const useWalletInterfaceMock = vi.fn();
+vi.mock("@/hooks/use-wallet-interface", () => ({
+  useWalletInterface: () => useWalletInterfaceMock(),
+}));
+
+// PageNote (rendered by Bag itself) also imports from @/utils - mock only
+// fetchStandardJson, keep everything else real.
+vi.mock("@/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils")>()),
+  fetchStandardJson: vi.fn(),
+}));
 
 // Modal portals into #modal-root (see app/layout.tsx) - not present by
 // default in jsdom, has to be added before each render. sessionStorage
@@ -15,6 +28,8 @@ const item2: CartItem = { showDate: "1998-07-29", position: 2, serial: 8, song: 
 // items the moment it mounts.
 beforeEach(() => {
   sessionStorage.clear();
+  useWalletInterfaceMock.mockReset().mockReturnValue({ accountId: "0.0.1", walletInterface: {} });
+  vi.mocked(fetchStandardJson).mockReset().mockResolvedValue(undefined);
   const modalRoot = document.createElement("div");
   modalRoot.id = "modal-root";
   document.body.appendChild(modalRoot);
@@ -88,6 +103,50 @@ describe("Bag", () => {
     expect(screen.getByText("Wilson")).toBeInTheDocument();
     // Badge count drops with it.
     expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  // Regression: useCart().removeItem only ever touched local state - Remove
+  // silently left the performance locked server-side until the 15-minute
+  // sweep caught it, which becomes a real problem once Remove is the only
+  // way to cancel a claim (hard cutover away from the single-item flow).
+  it("releases the server-side claim when an item is removed", async () => {
+    render(<Seeded items={[item1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() =>
+      expect(fetchStandardJson).toHaveBeenCalledWith(
+        "/api/mint/0.0.1/1998-07-29/1/7/abort",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "USER_CANCELLED" }),
+        }
+      )
+    );
+  });
+
+  it("still removes the item locally even if releasing the claim fails", async () => {
+    vi.mocked(fetchStandardJson).mockRejectedValue(new Error("network error"));
+    render(<Seeded items={[item1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.queryByText("Runaway Jim")).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchStandardJson).toHaveBeenCalled());
+  });
+
+  it("skips the release call (but still removes locally) with no wallet connected", () => {
+    useWalletInterfaceMock.mockReturnValue({ accountId: null, walletInterface: null });
+    render(<Seeded items={[item1]} />);
+    fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.queryByText("Runaway Jim")).not.toBeInTheDocument();
+    expect(fetchStandardJson).not.toHaveBeenCalled();
   });
 
   it("disables Checkout for now, with an explanatory note", () => {

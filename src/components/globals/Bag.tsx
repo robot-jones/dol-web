@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { MdShoppingBag } from "react-icons/md";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
+import { CartItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
+import { useWalletInterface } from "@/hooks/use-wallet-interface";
+import { fetchStandardJson } from "@/utils";
 import { DolButton } from "../common/DolButton";
 import { PageNote } from "../common/PageNote";
 import Modal from "./Modal";
@@ -13,6 +16,7 @@ import Modal from "./Modal";
 // nothing new to build there.
 export const Bag = () => {
   const { items, removeItem } = useCart();
+  const { accountId } = useWalletInterface();
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -26,6 +30,28 @@ export const Bag = () => {
 
   const handleBagClick = () => setOpen(!open);
   const handleClose = () => setOpen(false);
+
+  // Clears local cart state immediately (optimistic, same pattern as
+  // Performance.tsx's handleReleaseClick) and releases the server-side
+  // claim best-effort in the background - useCart itself never made this
+  // call, so Remove used to silently leave the performance locked for
+  // whoever clicked it until the 15-minute sweep caught it. The abort
+  // route always responds success regardless of outcome (it's designed to
+  // be safe to call more than once, or too late), so there's nothing
+  // meaningful to surface back to the user either way - this is purely
+  // best-effort cleanup, not something the UI needs to wait on.
+  const handleRemoveClick = (item: CartItem) => {
+    removeItem(item.showDate, item.position);
+    if (!accountId) return; // no session to release under - the sweep will still catch it
+    fetchStandardJson(
+      `/api/mint/${accountId}/${item.showDate}/${item.position}/${item.serial}/abort`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "USER_CANCELLED" }),
+      }
+    ).catch((err) => console.error("Failed to release bag item's claim:", err));
+  };
 
   return (
     <div className="relative">
@@ -81,7 +107,7 @@ export const Bag = () => {
                       size="sm"
                       color="gray"
                       outline
-                      onClick={() => removeItem(item.showDate, item.position)}
+                      onClick={() => handleRemoveClick(item)}
                     >
                       Remove
                     </DolButton>
