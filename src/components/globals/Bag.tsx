@@ -19,11 +19,13 @@ import Modal from "./Modal";
 // nothing new to build there.
 export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
+  const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
   const { items, removeItem } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
   const { mutateAccountStatus } = useAccountStatus(accountId);
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -60,13 +62,42 @@ export const Bag = () => {
     ).catch((err) => console.error("Failed to release bag item's claim:", err));
   };
 
-  // Single-click auto-chain, matching Performance.tsx's current
-  // handleConfirmMint/signAndFinalize pattern (CART.md: the two-click
+  // Never have both Modals mounted at once - each one's ClickAwayListener
+  // also listens for focusin by default, and Modal.tsx's own focus-
+  // management effect calls dialogRef.focus() on mount. Two independently
+  // mounted Modals meant the second one's mount-focus registered as an
+  // "away" click on the first (closing it), whose focus-restore-on-close
+  // then closed the second right back - both gone within one click. Real
+  // bug, only caught by a live browser check (jsdom's fireEvent doesn't
+  // reproduce the same focus-event cascade, so the unit tests missed it
+  // entirely). Closing the bag list before opening the confirm dialog,
+  // and reopening it afterward either way, keeps exactly one Modal
+  // mounted at a time.
+  const handleCheckoutButtonClick = () => {
+    setOpen(false);
+    setShowCheckoutConfirm(true);
+  };
+
+  const handleCheckoutConfirmCancel = () => {
+    setShowCheckoutConfirm(false);
+    setOpen(true);
+  };
+
+  // Confirm closes the modal and starts checkout in the same click - no
+  // second "Confirm in Wallet" step after this (CART.md: the two-click
   // split Phase 11 originally called for turned out unnecessary - Finding
   // 51 - and checkout is an even easier case, since it does no rendering
-  // of its own). No modal here yet - the "Confirm Mint"-style gate is a
-  // separate tracked idea (CART.md), not built as part of this pass.
-  const handleCheckoutClick = async () => {
+  // of its own). This modal is the relocated "Confirm Mint" gate from the
+  // old single-item flow (Performance.tsx), not a new mechanism. Reopens
+  // the bag list (rather than leaving everything closed) so the
+  // "Checking out..." button state and any notice are actually visible.
+  const handleCheckoutConfirm = () => {
+    setShowCheckoutConfirm(false);
+    setOpen(true);
+    startCheckout();
+  };
+
+  const startCheckout = async () => {
     if (!accountId || !walletInterface) {
       setNotice("Connect your wallet to check out.");
       return;
@@ -221,7 +252,7 @@ export const Bag = () => {
                 color="green"
                 fullWidth
                 disabled={checkingOut}
-                onClick={handleCheckoutClick}
+                onClick={handleCheckoutButtonClick}
               >
                 {checkingOut ? "Checking out..." : "Checkout"}
               </DolButton>
@@ -232,6 +263,33 @@ export const Bag = () => {
               {notice}
             </PageNote>
           )}
+        </div>
+      </Modal>
+      {/* Relocated from Performance.tsx's old single-item "Confirm Mint"
+          modal (CART.md) - same title/structure, copy adapted for N items:
+          the old second line ("We'll lock this spot and generate your
+          NFT...") described work that's already done by the time someone
+          reaches Checkout, so it couldn't just carry over verbatim. */}
+      <Modal
+        id="checkout-confirm"
+        show={showCheckoutConfirm}
+        onClose={handleCheckoutConfirmCancel}
+        title="Confirm Mint"
+        dim
+      >
+        <div className="flex flex-col gap-4 w-64 text-center">
+          <div className="text-balance">
+            You&apos;re about to mint{" "}
+            <strong>{items.length} performance{items.length === 1 ? "" : "s"}</strong>{" "}
+            for {items.length * Number(hbarPrice)} ℏ.
+          </div>
+          <div className="text-xs text-gray-medium">
+            We&apos;ll ask you to approve payment in your wallet, then finalize your NFTs.
+          </div>
+          <div className="flex flex-col gap-3">
+            <DolButton color="green" fullWidth onClick={handleCheckoutConfirm}>Confirm</DolButton>
+            <DolButton color="gray" outline fullWidth onClick={handleCheckoutConfirmCancel}>Cancel</DolButton>
+          </div>
         </div>
       </Modal>
     </div>

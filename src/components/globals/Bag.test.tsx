@@ -174,9 +174,13 @@ describe("Bag", () => {
   });
 
   describe("Checkout", () => {
+    // Goes all the way through the relocated "Confirm Mint" modal - most
+    // of these tests are about what happens once checkout actually starts,
+    // not about the confirm gate itself (that's covered separately below).
     const clickCheckout = () => {
       fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
       fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     };
 
     it("signs and finalizes every confirmed item, then clears the bag", async () => {
@@ -293,6 +297,36 @@ describe("Bag", () => {
 
       expect(await screen.findByText(/Something went wrong starting checkout/)).toBeInTheDocument();
       expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+    });
+
+    describe("Confirm Mint gate", () => {
+      it("shows the item count and total price, pluralized for multiple items", () => {
+        render(<Seeded items={[item1, item2]} />);
+        fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+        fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+
+        expect(screen.getByText(/2 performances/)).toBeInTheDocument();
+        expect(screen.getByText(/92 ℏ/)).toBeInTheDocument();
+      });
+
+      it("keeps it singular for one item", () => {
+        render(<Seeded items={[item1]} />);
+        fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+        fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+
+        expect(screen.getByText(/1 performance\b/)).toBeInTheDocument();
+      });
+
+      it("does not start checkout when Cancel is clicked", () => {
+        render(<Seeded items={[item1]} />);
+        fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+        fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(fetchStandardJson).not.toHaveBeenCalled();
+        // Bag itself is untouched - still there to try again.
+        expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+      });
     });
   });
 });
