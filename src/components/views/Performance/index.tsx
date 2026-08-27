@@ -434,7 +434,18 @@ export const Performance = (): React.ReactNode => {
       return { color: "gray", label: "Checking availability…" };
     }
     if (!accountId) {
-      return { color: "blue", label: `Connect Your Wallet · ${hbarPrice} ℏ`, onClick: handleConnectClick };
+      // Only shows a price when this is actually something you could mint
+      // right now - "Connect Your Wallet · 46 ℏ" read like connecting
+      // itself cost something. isPerformanceAvailable/isActive are both
+      // account-independent facts (not minted, not locked, collection
+      // publicly OPEN) - deliberately not checking isMintable's presale/
+      // whitelist half here, since that's account-specific and unknowable
+      // before a wallet's connected; a still-presale performance just
+      // falls through to the plain "Connect Your Wallet" below.
+      if (isPerformanceAvailable && isActive) {
+        return { color: "blue", label: `Mint: ${hbarPrice} ℏ`, onClick: handleConnectClick };
+      }
+      return { color: "blue", label: "Connect Your Wallet", onClick: handleConnectClick };
     }
     if (!isAssociated) {
       return {
