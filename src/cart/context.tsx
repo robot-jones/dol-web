@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useEffect, useState, ReactNode, Context } from "react";
-import { CartItem } from "./types";
+import { CartItem, PendingCartItem, ReadyCartItem } from "./types";
 
 const STORAGE_KEY = "dol-cart";
 // Hedera Token Service's own per-transfer NFT limit - matches
@@ -12,18 +12,41 @@ const STORAGE_KEY = "dol-cart";
 // local to put it.
 export const MAX_CART_ITEMS = 10;
 
+const findIndex = (items: CartItem[], showDate: string, position: number) =>
+  items.findIndex((i) => i.showDate === showDate && i.position === position);
+
 export type CartContextValue = {
   items: CartItem[];
-  // Returns false (no-op) if the item's already in the bag or the bag is
-  // full - lets the caller show feedback without the context throwing.
-  addItem: (item: CartItem) => boolean;
+  // Adds a "pending" placeholder immediately, synchronously - before any
+  // network call - so the performance page can show instant feedback
+  // instead of waiting on prepare() to resolve (see add-to-bag.ts).
+  // Returns false (no-op) if it's already in the bag in any status, or
+  // the bag is full.
+  addPendingItem: (showDate: string, position: number, song: string) => boolean;
+  // Replaces a pending item with its resolved, ready form once prepare()
+  // actually succeeds. No-op if the item isn't there (e.g. already
+  // removed) or isn't pending any more.
+  resolvePendingItem: (showDate: string, position: number, serial: number, lockedAt?: number) => void;
+  // Drops a pending item that failed to prepare and records why, so the
+  // bag can surface it if it's open. Deliberately not a persistent
+  // per-item error row - see lastError below.
+  failPendingItem: (showDate: string, position: number, message: string) => void;
+  // Most recent add-to-bag failure, if any - a single slot, not a list.
+  // Cleared explicitly (e.g. when the bag closes) rather than timing out
+  // on its own, so it's not missed if the bag wasn't open when it happened.
+  lastError: string | null;
+  clearLastError: () => void;
   removeItem: (showDate: string, position: number) => void;
   clear: () => void;
 };
 
 const defaultContext: CartContextValue = {
   items: [],
-  addItem: () => false,
+  addPendingItem: () => false,
+  resolvePendingItem: () => {},
+  failPendingItem: () => {},
+  lastError: null,
+  clearLastError: () => {},
   removeItem: () => {},
   clear: () => {},
 };
@@ -42,6 +65,7 @@ export const CartContextProvider = (props: {
   children: ReactNode | undefined;
 }) => {
   const [items, setItems] = useState<CartItem[]>(defaultContext.items);
+  const [lastError, setLastError] = useState<string | null>(null);
   // Reading sessionStorage has to happen in an effect, not the useState
   // initializer - it's unavailable during SSR, and seeding real data into
   // the initializer would mismatch the server-rendered empty state.
@@ -50,7 +74,17 @@ export const CartContextProvider = (props: {
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) setItems(JSON.parse(stored));
+      if (stored) {
+        const parsed: CartItem[] = JSON.parse(stored);
+        // A "pending" item means a prepare() call was in flight when the
+        // tab closed or reloaded - that promise chain is gone with the old
+        // page, nothing left to resolve it, and it would otherwise spin
+        // forever. Dropped rather than reconciled against the server: the
+        // underlying claim (if it actually landed) is still real and the
+        // 15-min sweep still cleans it up if abandoned - same accepted gap
+        // as reload-loses-cart generally, not a new one.
+        setItems(parsed.filter((item): item is ReadyCartItem => item.status === "ready"));
+      }
     } catch (err) {
       console.error("Failed to read cart from sessionStorage:", err);
     } finally {
@@ -67,24 +101,51 @@ export const CartContextProvider = (props: {
     }
   }, [items, hydrated]);
 
-  // Functional setItems throughout, not the plain-value form - addItem in
-  // particular has to stay correct even when called more than once before
-  // a re-render (React 18 batches synchronous calls), or a fast add
-  // sequence could silently drop items past the closure's stale snapshot.
-  const addItem = (item: CartItem): boolean => {
-    const alreadyIn = items.some(
-      (i) => i.showDate === item.showDate && i.position === item.position
-    );
+  // Functional setItems throughout, not the plain-value form - a fast
+  // sequence of calls has to stay correct even before a re-render (React
+  // 18 batches synchronous calls), or it could silently drop updates past
+  // a stale closure's snapshot (bit us once already building addItem -
+  // CART.md).
+  const addPendingItem = (showDate: string, position: number, song: string): boolean => {
+    const alreadyIn = findIndex(items, showDate, position) !== -1;
     if (alreadyIn || items.length >= MAX_CART_ITEMS) return false;
     setItems((prev) => {
-      if (prev.some((i) => i.showDate === item.showDate && i.position === item.position)) {
-        return prev;
-      }
+      if (findIndex(prev, showDate, position) !== -1) return prev;
       if (prev.length >= MAX_CART_ITEMS) return prev;
-      return [...prev, item];
+      const pending: PendingCartItem = { status: "pending", showDate, position, song, addedAt: Date.now() };
+      return [...prev, pending];
     });
     return true;
   };
+
+  const resolvePendingItem = (showDate: string, position: number, serial: number, lockedAt?: number) => {
+    setItems((prev) => {
+      const index = findIndex(prev, showDate, position);
+      if (index === -1 || prev[index].status !== "pending") return prev;
+      const ready: ReadyCartItem = {
+        status: "ready",
+        showDate,
+        position,
+        song: prev[index].song,
+        serial,
+        lockedAt,
+      };
+      const next = [...prev];
+      next[index] = ready;
+      return next;
+    });
+  };
+
+  const failPendingItem = (showDate: string, position: number, message: string) => {
+    setItems((prev) => {
+      const index = findIndex(prev, showDate, position);
+      if (index === -1 || prev[index].status !== "pending") return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+    setLastError(message);
+  };
+
+  const clearLastError = () => setLastError(null);
 
   const removeItem = (showDate: string, position: number) => {
     setItems((prev) => prev.filter((i) => !(i.showDate === showDate && i.position === position)));
@@ -93,7 +154,9 @@ export const CartContextProvider = (props: {
   const clear = () => setItems([]);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, clear }}>
+    <CartContext.Provider
+      value={{ items, addPendingItem, resolvePendingItem, failPendingItem, lastError, clearLastError, removeItem, clear }}
+    >
       {props.children}
     </CartContext.Provider>
   );

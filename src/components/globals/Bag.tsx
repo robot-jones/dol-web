@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
-import { CartItem } from "@/cart";
+import { CLAIM_PROGRESS_STEPS, getProgressStepIndex, ReadyCartItem } from "@/cart";
+import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { useAccountStatus } from "@/hooks/use-account-status";
 import { useCart } from "@/hooks/use-cart";
 import { useWalletInterface } from "@/hooks/use-wallet-interface";
@@ -20,7 +21,7 @@ import Modal from "./Modal";
 export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
-  const { items, removeItem } = useCart();
+  const { items, removeItem, lastError, clearLastError } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
   const { mutateAccountStatus } = useAccountStatus(accountId);
   const [open, setOpen] = useState(false);
@@ -29,8 +30,13 @@ export const Bag = () => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const readyItems = items.filter((i): i is ReadyCartItem => i.status === "ready");
+  const hasPending = items.some((i) => i.status === "pending");
+
   // Only ticking while the bag is actually open - no point re-rendering a
-  // closed modal's contents once a second.
+  // closed modal's contents once a second. Also drives each pending item's
+  // displayed progress step (derived from addedAt, not a separately
+  // mutated counter - see getProgressStepIndex).
   useEffect(() => {
     if (!open) return undefined;
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -38,18 +44,21 @@ export const Bag = () => {
   }, [open]);
 
   const handleBagClick = () => setOpen(!open);
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {
+    setOpen(false);
+    clearLastError();
+  };
 
-  // Clears local cart state immediately (optimistic, same pattern as
-  // Performance.tsx's handleReleaseClick) and releases the server-side
-  // claim best-effort in the background - useCart itself never made this
-  // call, so Remove used to silently leave the performance locked for
-  // whoever clicked it until the 15-minute sweep caught it. The abort
-  // route always responds success regardless of outcome (it's designed to
-  // be safe to call more than once, or too late), so there's nothing
+  // Only ever offered for ready items - Remove doesn't render at all for a
+  // still-pending one (cancelling a still-in-flight add isn't supported
+  // yet, CART.md). Clears local cart state immediately (optimistic, same
+  // pattern as Performance.tsx's handleReleaseClick) and releases the
+  // server-side claim best-effort in the background. The abort route
+  // always responds success regardless of outcome (it's designed to be
+  // safe to call more than once, or too late), so there's nothing
   // meaningful to surface back to the user either way - this is purely
   // best-effort cleanup, not something the UI needs to wait on.
-  const handleRemoveClick = (item: CartItem) => {
+  const handleRemoveClick = (item: ReadyCartItem) => {
     removeItem(item.showDate, item.position);
     if (!accountId) return; // no session to release under - the sweep will still catch it
     fetchStandardJson(
@@ -112,7 +121,7 @@ export const Bag = () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: items.map((item) => ({ showDate: item.showDate, position: item.position })),
+            items: readyItems.map((item) => ({ showDate: item.showDate, position: item.position })),
           }),
         }
       );
@@ -124,7 +133,7 @@ export const Bag = () => {
       if (expired.length > 0) {
         expired.forEach((item) => removeItem(item.showDate, item.position));
         const songs = expired
-          .map((item) => items.find((i) => i.showDate === item.showDate && i.position === item.position)?.song)
+          .map((item) => readyItems.find((i) => i.showDate === item.showDate && i.position === item.position)?.song)
           .filter(Boolean)
           .join(", ");
         setNotice(`Sorry, some items expired and were removed from your bag${songs ? `: ${songs}` : "."}`);
@@ -135,8 +144,8 @@ export const Bag = () => {
       }
 
       const confirmedItems = confirmed
-        .map((c) => items.find((i) => i.showDate === c.showDate && i.position === c.position))
-        .filter((i): i is CartItem => i !== undefined);
+        .map((c) => readyItems.find((i) => i.showDate === c.showDate && i.position === c.position))
+        .filter((i): i is ReadyCartItem => i !== undefined);
 
       const tx = TransferTransaction.fromBytes(new Uint8Array(txBytes.data));
       const purchaseSuccess = await walletInterface.purchaseNfts(
@@ -187,6 +196,12 @@ export const Bag = () => {
     }
   };
 
+  const checkoutLabel = hasPending
+    ? "Waiting for items…"
+    : checkingOut
+      ? "Checking out..."
+      : "Checkout";
+
   return (
     <div className="relative">
       <button
@@ -231,32 +246,45 @@ export const Bag = () => {
                     <div>
                       <div className="text-sm">{item.song}</div>
                       <div className="text-xs text-gray-medium">{toFriendlyDate(item.showDate)}</div>
-                      {item.lockedAt && (
+                      {item.status === "ready" && item.lockedAt && (
                         <div className="text-xs text-gray-medium">
                           Locked for {msToTime(now - item.lockedAt)}
                         </div>
                       )}
+                      {item.status === "pending" && (
+                        <div className="flex items-center gap-1.5 text-xs text-dol-yellow">
+                          <AnimatedDonut sizeInPixels={12} />
+                          <span>{CLAIM_PROGRESS_STEPS[getProgressStepIndex(item.addedAt, now)]}</span>
+                        </div>
+                      )}
                     </div>
-                    <DolButton
-                      size="sm"
-                      color="gray"
-                      outline
-                      onClick={() => handleRemoveClick(item)}
-                    >
-                      Remove
-                    </DolButton>
+                    {item.status === "ready" && (
+                      <DolButton
+                        size="sm"
+                        color="gray"
+                        outline
+                        onClick={() => handleRemoveClick(item)}
+                      >
+                        Remove
+                      </DolButton>
+                    )}
                   </li>
                 ))}
               </ul>
               <DolButton
                 color="green"
                 fullWidth
-                disabled={checkingOut}
+                disabled={checkingOut || hasPending}
                 onClick={handleCheckoutButtonClick}
               >
-                {checkingOut ? "Checking out..." : "Checkout"}
+                {checkoutLabel}
               </DolButton>
             </>
+          )}
+          {lastError && (
+            <PageNote color="dark" className="text-center">
+              {lastError}
+            </PageNote>
           )}
           {notice && (
             <PageNote color="dark" className="text-center">
@@ -280,8 +308,8 @@ export const Bag = () => {
         <div className="flex flex-col gap-4 w-64 text-center">
           <div className="text-balance">
             You&apos;re about to mint{" "}
-            <strong>{items.length} performance{items.length === 1 ? "" : "s"}</strong>{" "}
-            for {items.length * Number(hbarPrice)} ℏ.
+            <strong>{readyItems.length} performance{readyItems.length === 1 ? "" : "s"}</strong>{" "}
+            for {readyItems.length * Number(hbarPrice)} ℏ.
           </div>
           <div className="text-xs text-gray-medium">
             We&apos;ll ask you to approve payment in your wallet, then finalize your NFTs.

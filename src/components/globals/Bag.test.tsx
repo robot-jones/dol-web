@@ -5,8 +5,15 @@ import { useCart } from "@/hooks/use-cart";
 import { fetchStandardJson } from "@/utils";
 import { Bag } from "./Bag";
 
-const item1: CartItem = { showDate: "1998-07-29", position: 1, serial: 7, song: "Runaway Jim", lockedAt: Date.now() };
-const item2: CartItem = { showDate: "1998-07-29", position: 2, serial: 8, song: "Wilson" };
+const item1: CartItem = {
+  status: "ready",
+  showDate: "1998-07-29",
+  position: 1,
+  serial: 7,
+  song: "Runaway Jim",
+  lockedAt: Date.now(),
+};
+const item2: CartItem = { status: "ready", showDate: "1998-07-29", position: 2, serial: 8, song: "Wilson" };
 
 const purchaseNfts = vi.fn();
 const useWalletInterfaceMock = vi.fn();
@@ -64,13 +71,19 @@ afterEach(() => {
 });
 
 // Seeds cart state via the same public API the real "Add to Bag" button
-// will use, rather than reaching into CartContext internals. items/addItem
-// deliberately left out of the effect's deps - this only ever needs to run
-// once, on mount, with whatever was passed in at that point.
+// will use (addPendingItem, then resolvePendingItem for anything meant to
+// be "ready"), rather than reaching into CartContext internals. Deps
+// deliberately left out of the effect - this only ever needs to run once,
+// on mount, with whatever was passed in at that point.
 const SeedItems = ({ items }: { items: CartItem[] }) => {
-  const { addItem } = useCart();
+  const cart = useCart();
   useEffect(() => {
-    items.forEach((item) => addItem(item));
+    items.forEach((item) => {
+      cart.addPendingItem(item.showDate, item.position, item.song);
+      if (item.status === "ready") {
+        cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
@@ -116,7 +129,7 @@ describe("Bag", () => {
     expect(screen.getByText("Wilson")).toBeInTheDocument();
   });
 
-  it("removes an item via its Remove button", () => {
+  it("removes a ready item via its Remove button", () => {
     render(<Seeded items={[item1, item2]} />);
     fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
@@ -133,7 +146,7 @@ describe("Bag", () => {
   // silently left the performance locked server-side until the 15-minute
   // sweep caught it, which becomes a real problem once Remove is the only
   // way to cancel a claim (hard cutover away from the single-item flow).
-  it("releases the server-side claim when an item is removed", async () => {
+  it("releases the server-side claim when a ready item is removed", async () => {
     render(<Seeded items={[item1]} />);
     fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
@@ -171,6 +184,112 @@ describe("Bag", () => {
 
     expect(screen.queryByText("Runaway Jim")).not.toBeInTheDocument();
     expect(fetchStandardJson).not.toHaveBeenCalled();
+  });
+
+  describe("pending items", () => {
+    const PendingOnly = () => {
+      const cart = useCart();
+      useEffect(() => {
+        cart.addPendingItem("1998-07-29", 1, "Runaway Jim");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    };
+    const renderWithPending = () =>
+      render(
+        <CartContextProvider>
+          <PendingOnly />
+          <Bag />
+        </CartContextProvider>
+      );
+
+    it("shows progress text instead of a Locked-for note, and no Remove button", () => {
+      renderWithPending();
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+      // getProgressStepIndex(addedAt, now) is 0 immediately after adding -
+      // CLAIM_PROGRESS_STEPS[0] is MintStatusDisplayText.Claiming.
+      expect(screen.getByText("Claiming performance...")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+    });
+
+    it("counts toward the badge like any other item", () => {
+      renderWithPending();
+      expect(screen.getByText("1")).toBeInTheDocument();
+    });
+
+    it("disables Checkout with a waiting label while anything is still pending", () => {
+      renderWithPending();
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      const checkoutButton = screen.getByRole("button", { name: "Waiting for items…" });
+      expect(checkoutButton).toBeDisabled();
+    });
+
+    it("re-enables Checkout once the pending item resolves", () => {
+      const ResolvesItself = () => {
+        const cart = useCart();
+        useEffect(() => {
+          cart.addPendingItem("1998-07-29", 1, "Runaway Jim");
+          cart.resolvePendingItem("1998-07-29", 1, 7, Date.now());
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
+        return null;
+      };
+      render(
+        <CartContextProvider>
+          <ResolvesItself />
+          <Bag />
+        </CartContextProvider>
+      );
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.getByRole("button", { name: "Checkout" })).not.toBeDisabled();
+    });
+  });
+
+  describe("lastError", () => {
+    const FailsItself = () => {
+      const cart = useCart();
+      useEffect(() => {
+        cart.addPendingItem("1998-07-29", 1, "Runaway Jim");
+        cart.failPendingItem("1998-07-29", 1, "There's no token supply at this time.");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    };
+
+    it("shows the most recent add-to-bag failure when the bag is opened", () => {
+      render(
+        <CartContextProvider>
+          <FailsItself />
+          <Bag />
+        </CartContextProvider>
+      );
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.getByText("There's no token supply at this time.")).toBeInTheDocument();
+      // The failed item never made it to ready, so it's gone from the list -
+      // "empty" and the error note can both be true at once.
+      expect(screen.getByText("Your bag is empty.")).toBeInTheDocument();
+    });
+
+    it("clears once the bag is closed", () => {
+      render(
+        <CartContextProvider>
+          <FailsItself />
+          <Bag />
+        </CartContextProvider>
+      );
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+      expect(screen.getByText("There's no token supply at this time.")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.queryByText("There's no token supply at this time.")).not.toBeInTheDocument();
+    });
   });
 
   describe("Checkout", () => {
