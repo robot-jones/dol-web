@@ -8,6 +8,7 @@ import { Bag } from "./Bag";
 const item1: CartItem = { showDate: "1998-07-29", position: 1, serial: 7, song: "Runaway Jim", lockedAt: Date.now() };
 const item2: CartItem = { showDate: "1998-07-29", position: 2, serial: 8, song: "Wilson" };
 
+const purchaseNfts = vi.fn();
 const useWalletInterfaceMock = vi.fn();
 vi.mock("@/hooks/use-wallet-interface", () => ({
   useWalletInterface: () => useWalletInterfaceMock(),
@@ -20,6 +21,19 @@ vi.mock("@/utils", async (importOriginal) => ({
   fetchStandardJson: vi.fn(),
 }));
 
+// TransferTransaction.fromBytes just needs to hand something back for
+// purchaseNfts to receive - purchaseNfts itself is mocked, so the value's
+// shape doesn't matter beyond being a stable, assertable placeholder.
+vi.mock("@hashgraph/sdk", () => ({
+  NftId: class {
+    constructor(public tokenId: unknown, public serial: number) {}
+  },
+  TokenId: { fromString: (s: string) => ({ toString: () => s }) },
+  TransferTransaction: { fromBytes: () => "MOCK_TX" },
+}));
+
+const rawTxBytes = { type: "Buffer" as const, data: [1, 2, 3] };
+
 // Modal portals into #modal-root (see app/layout.tsx) - not present by
 // default in jsdom, has to be added before each render. sessionStorage
 // also has to be cleared - CartContextProvider's own hydration effect runs
@@ -28,7 +42,11 @@ vi.mock("@/utils", async (importOriginal) => ({
 // items the moment it mounts.
 beforeEach(() => {
   sessionStorage.clear();
-  useWalletInterfaceMock.mockReset().mockReturnValue({ accountId: "0.0.1", walletInterface: {} });
+  purchaseNfts.mockReset();
+  useWalletInterfaceMock.mockReset().mockReturnValue({
+    accountId: "0.0.1",
+    walletInterface: { purchaseNfts },
+  });
   vi.mocked(fetchStandardJson).mockReset().mockResolvedValue(undefined);
   const modalRoot = document.createElement("div");
   modalRoot.id = "modal-root";
@@ -149,11 +167,105 @@ describe("Bag", () => {
     expect(fetchStandardJson).not.toHaveBeenCalled();
   });
 
-  it("disables Checkout for now, with an explanatory note", () => {
-    render(<Seeded items={[item1]} />);
-    fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+  describe("Checkout", () => {
+    const clickCheckout = () => {
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+      fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+    };
 
-    expect(screen.getByRole("button", { name: "Checkout" })).toBeDisabled();
-    expect(screen.getByText(/Checkout is coming soon/)).toBeInTheDocument();
+    it("signs and finalizes every confirmed item, then clears the bag", async () => {
+      vi.mocked(fetchStandardJson).mockImplementation(async (url: unknown) => {
+        if (`${url}`.endsWith("/checkout")) {
+          return {
+            txBytes: rawTxBytes,
+            confirmed: [
+              { showDate: item1.showDate, position: item1.position },
+              { showDate: item2.showDate, position: item2.position },
+            ],
+            expired: [],
+          };
+        }
+        return true; // finalize calls
+      });
+      purchaseNfts.mockResolvedValue(true);
+
+      render(<Seeded items={[item1, item2]} />);
+      clickCheckout();
+
+      await waitFor(() => expect(screen.getByText("Your bag is empty.")).toBeInTheDocument());
+
+      expect(purchaseNfts).toHaveBeenCalledTimes(1);
+      const [tx, purchaseItems] = purchaseNfts.mock.calls[0];
+      expect(tx).toBe("MOCK_TX");
+      expect(purchaseItems).toEqual([
+        expect.objectContaining({ showDate: item1.showDate, position: item1.position, nftId: expect.objectContaining({ serial: item1.serial }) }),
+        expect.objectContaining({ showDate: item2.showDate, position: item2.position, nftId: expect.objectContaining({ serial: item2.serial }) }),
+      ]);
+      expect(fetchStandardJson).toHaveBeenCalledWith(
+        `/api/mint/0.0.1/${item1.showDate}/${item1.position}/${item1.serial}`,
+        { method: "POST" }
+      );
+      expect(fetchStandardJson).toHaveBeenCalledWith(
+        `/api/mint/0.0.1/${item2.showDate}/${item2.position}/${item2.serial}`,
+        { method: "POST" }
+      );
+    });
+
+    // Erik's call (CART.md): a declined/failed signature leaves the bag
+    // alone rather than releasing every item - nothing was paid for, and
+    // re-preparing everything from scratch is a harsh retry cost.
+    it("leaves items in the bag and shows a notice when the wallet doesn't confirm", async () => {
+      vi.mocked(fetchStandardJson).mockResolvedValue({
+        txBytes: rawTxBytes,
+        confirmed: [{ showDate: item1.showDate, position: item1.position }],
+        expired: [],
+      });
+      purchaseNfts.mockResolvedValue(false);
+
+      render(<Seeded items={[item1]} />);
+      clickCheckout();
+
+      expect(await screen.findByText(/didn't confirm the transaction/)).toBeInTheDocument();
+      expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+    });
+
+    it("drops expired items with a notice, but still finalizes the confirmed ones", async () => {
+      vi.mocked(fetchStandardJson).mockImplementation(async (url: unknown) => {
+        if (`${url}`.endsWith("/checkout")) {
+          return {
+            txBytes: rawTxBytes,
+            confirmed: [{ showDate: item1.showDate, position: item1.position }],
+            expired: [{ showDate: item2.showDate, position: item2.position }],
+          };
+        }
+        return true;
+      });
+      purchaseNfts.mockResolvedValue(true);
+
+      render(<Seeded items={[item1, item2]} />);
+      clickCheckout();
+
+      expect(await screen.findByText(/expired and were removed.*Wilson/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText("Your bag is empty.")).toBeInTheDocument());
+    });
+
+    it("shows a notice and makes no request with no wallet connected", () => {
+      useWalletInterfaceMock.mockReturnValue({ accountId: null, walletInterface: null });
+      render(<Seeded items={[item1]} />);
+      clickCheckout();
+
+      expect(screen.getByText("Connect your wallet to check out.")).toBeInTheDocument();
+      expect(fetchStandardJson).not.toHaveBeenCalled();
+    });
+
+    it("shows an error notice if the checkout request itself fails", async () => {
+      vi.mocked(fetchStandardJson).mockRejectedValue(new Error("network error"));
+
+      render(<Seeded items={[item1]} />);
+      clickCheckout();
+
+      expect(await screen.findByText(/Something went wrong starting checkout/)).toBeInTheDocument();
+      expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+    });
   });
 });

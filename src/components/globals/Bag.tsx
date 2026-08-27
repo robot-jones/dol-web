@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { MdShoppingBag } from "react-icons/md";
+import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 import { CartItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
 import { useWalletInterface } from "@/hooks/use-wallet-interface";
 import { fetchStandardJson } from "@/utils";
+import type { ServerCheckoutResponse } from "@/app/api/mint/[accountId]/checkout/route";
 import { DolButton } from "../common/DolButton";
 import { PageNote } from "../common/PageNote";
 import Modal from "./Modal";
@@ -15,10 +17,13 @@ import Modal from "./Modal";
 // button-opens-Modal pattern exactly - same header slot, same mechanism,
 // nothing new to build there.
 export const Bag = () => {
+  const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const { items, removeItem } = useCart();
-  const { accountId } = useWalletInterface();
+  const { accountId, walletInterface } = useWalletInterface();
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Only ticking while the bag is actually open - no point re-rendering a
   // closed modal's contents once a second.
@@ -51,6 +56,95 @@ export const Bag = () => {
         body: JSON.stringify({ reason: "USER_CANCELLED" }),
       }
     ).catch((err) => console.error("Failed to release bag item's claim:", err));
+  };
+
+  // Single-click auto-chain, matching Performance.tsx's current
+  // handleConfirmMint/signAndFinalize pattern (CART.md: the two-click
+  // split Phase 11 originally called for turned out unnecessary - Finding
+  // 51 - and checkout is an even easier case, since it does no rendering
+  // of its own). No modal here yet - the "Confirm Mint"-style gate is a
+  // separate tracked idea (CART.md), not built as part of this pass.
+  const handleCheckoutClick = async () => {
+    if (!accountId || !walletInterface) {
+      setNotice("Connect your wallet to check out.");
+      return;
+    }
+
+    setNotice(null);
+    setCheckingOut(true);
+    try {
+      const response = await fetchStandardJson<ServerCheckoutResponse>(
+        `/api/mint/${accountId}/checkout`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: items.map((item) => ({ showDate: item.showDate, position: item.position })),
+          }),
+        }
+      );
+      const { txBytes, confirmed, expired } = response;
+
+      // Dropped by the server's re-verification (e.g. the 15-min sweep
+      // reclaimed one mid-shop) - stale either way, no reason to keep them
+      // around for a retry to just fail the same way again.
+      if (expired.length > 0) {
+        expired.forEach((item) => removeItem(item.showDate, item.position));
+        const songs = expired
+          .map((item) => items.find((i) => i.showDate === item.showDate && i.position === item.position)?.song)
+          .filter(Boolean)
+          .join(", ");
+        setNotice(`Sorry, some items expired and were removed from your bag${songs ? `: ${songs}` : "."}`);
+      }
+
+      if (!txBytes || confirmed.length === 0) {
+        return;
+      }
+
+      const confirmedItems = confirmed
+        .map((c) => items.find((i) => i.showDate === c.showDate && i.position === c.position))
+        .filter((i): i is CartItem => i !== undefined);
+
+      const tx = TransferTransaction.fromBytes(new Uint8Array(txBytes.data));
+      const purchaseSuccess = await walletInterface.purchaseNfts(
+        tx,
+        confirmedItems.map((item) => ({
+          nftId: new NftId(TokenId.fromString(hfbCollectionId), item.serial),
+          showDate: item.showDate,
+          position: item.position,
+        }))
+      );
+
+      if (!purchaseSuccess) {
+        // Left in the bag deliberately (Erik's call, CART.md) - nothing was
+        // paid for, so nothing needs releasing, and re-preparing everything
+        // from scratch over one declined wallet prompt is a harsh retry
+        // cost. The 15-min sweep is still the backstop if truly abandoned.
+        setNotice("Your wallet didn't confirm the transaction. Your items are still in your bag - try again anytime.");
+        return;
+      }
+
+      // Same finalize step as today's single-item flow, just repeated -
+      // the post-transfer route itself is unmodified (CART.md). Best-effort
+      // per item: the money's already moved regardless of finalize's
+      // outcome, so one item's finalize failing shouldn't block the rest.
+      for (const item of confirmedItems) {
+        try {
+          await fetchStandardJson<boolean>(
+            `/api/mint/${accountId}/${item.showDate}/${item.position}/${item.serial}`,
+            { method: "POST" }
+          );
+        } catch (err) {
+          console.error("Finalize request failed for bag item:", item, err);
+        }
+        removeItem(item.showDate, item.position);
+      }
+    } catch (err) {
+      console.error("Checkout request failed:", err);
+      setNotice("Something went wrong starting checkout. Please try again.");
+    } finally {
+      setCheckingOut(false);
+    }
   };
 
   return (
@@ -114,11 +208,20 @@ export const Bag = () => {
                   </li>
                 ))}
               </ul>
-              <DolButton color="green" fullWidth disabled>Checkout</DolButton>
-              <PageNote color="dark" className="text-center">
-                Checkout is coming soon - for now this is just your bag.
-              </PageNote>
+              <DolButton
+                color="green"
+                fullWidth
+                disabled={checkingOut}
+                onClick={handleCheckoutClick}
+              >
+                {checkingOut ? "Checking out..." : "Checkout"}
+              </DolButton>
             </>
+          )}
+          {notice && (
+            <PageNote color="dark" className="text-center">
+              {notice}
+            </PageNote>
           )}
         </div>
       </Modal>

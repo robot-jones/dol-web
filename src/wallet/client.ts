@@ -20,7 +20,7 @@ import type { ActionContext } from "@erikmuir/dol-lib/types";
 import { sleep } from "@erikmuir/dol-lib/utils";
 import { fetchJson } from "@/utils";
 import { WalletConnectContext } from "./context";
-import { WalletInterface } from "./wallet-interface";
+import { PurchaseNftItem, WalletInterface } from "./wallet-interface";
 
 // Created refreshEvent because `dappConnector.walletConnectClient.on(eventName, syncWithWalletConnectContext)` would not call syncWithWalletConnectContext
 // Reference usage from walletconnect implementation https://github.com/hashgraph/hedera-wallet-connect/blob/main/src/lib/dapp/index.ts#L120C1-L124C9
@@ -118,6 +118,48 @@ class WalletConnectWallet implements WalletInterface {
     return success;
   }
 
+  // AC/DC Bag checkout - one TransferTransaction covering every item in
+  // the bag at once. The sign/execute/receipt call itself doesn't care how
+  // many transfer legs are in tx (same as purchaseNft below); the only
+  // real difference is the audit log, which needs one NFT_PURCHASE entry
+  // per item rather than the single tokenId/serial/showDate/position a
+  // single-item transaction carries.
+  async purchaseNfts(
+    tx: Transaction,
+    items: PurchaseNftItem[]
+  ): Promise<boolean> {
+    let success = false;
+    let transactionId: string | undefined;
+    try {
+      const signer = this.getSigner();
+      await sleep(1000); // is this needed?
+      const signedTx = await tx.signWithSigner(signer);
+      const txResult = await signedTx.executeWithSigner(signer);
+      transactionId = txResult.transactionId.toString();
+      const txReceipt = await txResult.getReceiptWithSigner(signer);
+      success = txReceipt?.status.toString() === "SUCCESS";
+    } catch (err) {
+      console.error("Failed transfer transaction:", err);
+    } finally {
+      const accountId = this.getAccountId();
+      // One atomic transaction, so every item shares the same
+      // success/transactionId - all-or-nothing, per Hedera's own semantics.
+      await Promise.all(
+        items.map((item) =>
+          auditClient("NFT_PURCHASE", success, accountId, {
+            tokenId: item.nftId.tokenId.toString(),
+            serial: item.nftId.serial.toNumber(),
+            showDate: item.showDate,
+            position: item.position,
+            transactionId,
+          })
+        )
+      );
+    }
+    return success;
+  }
+
+  /** @deprecated use purchaseNfts - kept only until Performance.tsx's single-item flow is retired (CART.md) */
   async purchaseNft(
     tx: Transaction,
     nftId: NftId,
