@@ -434,7 +434,7 @@ export const Performance = (): React.ReactNode => {
       return { color: "gray", label: "Checking availability…" };
     }
     if (!accountId) {
-      return { color: "blue", label: "Connect Your Wallet", onClick: handleConnectClick };
+      return { color: "blue", label: `Connect Your Wallet · ${hbarPrice} ℏ`, onClick: handleConnectClick };
     }
     if (!isAssociated) {
       return {
