@@ -79,12 +79,29 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
 
 export const openWalletConnectModal = async () => {
   await withTimeout(initializeWalletConnect(), CONNECT_TIMEOUT_MS);
-  await withTimeout(
-    dappConnector.openModal().then(() => {
-      refreshEvent.emit("sync");
-    }),
-    CONNECT_TIMEOUT_MS
-  );
+  try {
+    // throwErrorOnReject (default false, per the library) is what makes
+    // closing the modal without connecting actually settle the promise at
+    // all - left at the default, it just hangs forever (indistinguishable
+    // from a genuine timeout), which is exactly what the 20s timeout above
+    // was catching as a false "Failed to open wallet connect" error - a
+    // deliberate close isn't a failure at all.
+    await withTimeout(
+      dappConnector.openModal(undefined, true).then(() => {
+        refreshEvent.emit("sync");
+      }),
+      CONNECT_TIMEOUT_MS
+    );
+  } catch (err) {
+    // Bug reported live 2026-08-27: closing the QR modal without ever
+    // opening a wallet isn't a failure - it's a deliberate cancel. Only
+    // real failures (timeout, relay errors, etc.) should propagate to
+    // callers as something worth showing an error for.
+    if (err instanceof Error && err.message === "User rejected pairing") {
+      return;
+    }
+    throw err;
+  }
 };
 
 // Fire-and-forget, same as auditClient - dol-lib's acceptTerms is

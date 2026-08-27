@@ -5,7 +5,7 @@
 // at all was purchaseNfts becoming the app's sole payment path once
 // purchaseNft retired, so that's what it's scoped to cover.
 
-const { signers, initMock, disconnectAllMock } = vi.hoisted(() => {
+const { signers, initMock, openModalMock, disconnectAllMock } = vi.hoisted(() => {
   // client.ts reads this at module top level (LedgerId.fromString(network),
   // passed to the real-but-network-agnostic LedgerId below) - plain
   // textual ordering before the `import "./client"` further down does NOT
@@ -17,6 +17,7 @@ const { signers, initMock, disconnectAllMock } = vi.hoisted(() => {
   return {
     signers: [] as unknown[],
     initMock: vi.fn(async () => {}),
+    openModalMock: vi.fn(async () => {}),
     disconnectAllMock: vi.fn(async () => {}),
   };
 });
@@ -31,7 +32,7 @@ vi.mock("@hashgraph/hedera-wallet-connect", () => ({
   DAppConnector: class {
     signers = signers;
     init = initMock;
-    openModal = vi.fn(async () => {});
+    openModal = openModalMock;
     disconnectAll = disconnectAllMock;
   },
   HederaJsonRpcMethod: {},
@@ -242,6 +243,28 @@ describe("openWalletConnectModal", () => {
   beforeEach(() => {
     vi.resetModules();
     initMock.mockReset();
+    openModalMock.mockReset();
+  });
+
+  // Bug reported live 2026-08-27, right after the timeout fix above shipped:
+  // closing the QR modal without ever connecting a wallet isn't a failure -
+  // it's a deliberate cancel. hedera-wallet-connect's own openModal() only
+  // rejects on a user-close when called with throwErrorOnReject=true (it
+  // defaults to false, i.e. hangs forever on close, which is exactly what
+  // the 20s timeout above was then misreporting as a real failure).
+  it("does not report an error when the user closes the modal without connecting", async () => {
+    openModalMock.mockRejectedValue(new Error("User rejected pairing"));
+    const { openWalletConnectModal } = await import("./client");
+
+    await expect(openWalletConnectModal()).resolves.toBeUndefined();
+    expect(openModalMock).toHaveBeenCalledWith(undefined, true);
+  });
+
+  it("still reports a genuine openModal failure", async () => {
+    openModalMock.mockRejectedValue(new Error("relay error"));
+    const { openWalletConnectModal } = await import("./client");
+
+    await expect(openWalletConnectModal()).rejects.toThrow("relay error");
   });
 
   it("retries init on the next call instead of replaying the same rejection forever", async () => {
