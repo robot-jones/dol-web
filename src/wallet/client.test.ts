@@ -229,3 +229,42 @@ describe("WalletConnectWallet", () => {
     });
   });
 });
+
+// Bug found 2026-08-27 investigating a live "Connect Wallet does nothing"
+// report: client.ts cached a rejected init() attempt in a module-level
+// promise forever (every later click just replayed the same stale
+// rejection) and had nothing bounding a hung init() at all (a click could
+// go silently unresponsive forever). Both scoped to their own describe
+// block, using vi.resetModules() + a fresh dynamic import per test - the
+// module-level `walletConnectInitPromise` this is all about needs a truly
+// clean slate each time, not just a cleared mock.
+describe("openWalletConnectModal", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    initMock.mockReset();
+  });
+
+  it("retries init on the next call instead of replaying the same rejection forever", async () => {
+    initMock.mockRejectedValueOnce(new Error("relay error")).mockResolvedValueOnce(undefined);
+    const { openWalletConnectModal } = await import("./client");
+
+    await expect(openWalletConnectModal()).rejects.toThrow("relay error");
+    await expect(openWalletConnectModal()).resolves.toBeUndefined();
+
+    expect(initMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("times out instead of hanging forever when init never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      initMock.mockImplementation(() => new Promise(() => {}));
+      const { openWalletConnectModal } = await import("./client");
+
+      const result = expect(openWalletConnectModal()).rejects.toThrow("Wallet connect timed out");
+      await vi.advanceTimersByTimeAsync(20_000);
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

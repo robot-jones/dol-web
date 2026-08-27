@@ -97,6 +97,7 @@ export const MintAction = ({
   const [now, setNow] = useState(Date.now());
   const [releasingClaim, setReleasingClaim] = useState(false);
   const [associateError, setAssociateError] = useState(false);
+  const [connectError, setConnectError] = useState(false);
   const [showBagIntro, setShowBagIntro] = useState(false);
 
   const bagEntry = bagItems.find((i) => i.showDate === showDate && i.position === position);
@@ -120,8 +121,19 @@ export const MintAction = ({
     return () => clearInterval(interval);
   }, [lockedBy, bagEntry]);
 
-  const handleConnectClick = () => {
-    openWalletConnectModal();
+  // Bug reported live on preview (2026-08-27): this used to be
+  // fire-and-forget, so a failed connect attempt (e.g. the wallet's relay
+  // subscription failing) surfaced nowhere - the pill just sat there and
+  // nothing visibly happened. Awaiting + catching turns that into a real
+  // error message, same pattern as handleAssociateClick already used here.
+  const handleConnectClick = async () => {
+    setConnectError(false);
+    try {
+      await openWalletConnectModal();
+    } catch (err) {
+      console.error("Failed to open wallet connect:", err);
+      setConnectError(true);
+    }
   };
 
   const handleAssociateClick = async () => {
@@ -234,7 +246,16 @@ export const MintAction = ({
 
     // Not connected
     if (!isConnected) {
-      return { color: "blue", label: `Mint: ${hbarPrice} ℏ`, onClick: handleConnectClick };
+      return {
+        color: "blue",
+        label: `Mint: ${hbarPrice} ℏ`,
+        onClick: handleConnectClick,
+        extra: connectError ? (
+          <div className="text-xs text-dol-red text-center">
+            Failed to open wallet connect. Please try again.
+          </div>
+        ) : null,
+      };
     }
 
     // Not associated

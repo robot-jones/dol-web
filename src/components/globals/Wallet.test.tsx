@@ -146,6 +146,39 @@ describe("Wallet connect consent flow", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  // Bug reported live on preview (2026-08-27): a failed connect attempt
+  // (e.g. the wallet's relay subscription failing) used to have nowhere to
+  // surface at all - the menu just closed and nothing else happened.
+  it("shows an error and reopens the menu when the connect attempt fails", async () => {
+    vi.mocked(openWalletConnectModal).mockRejectedValue(new Error("relay error"));
+    render(<Wallet />);
+    openMenu();
+    clickConnect();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Agree & Connect" }));
+
+    expect(await screen.findByText("Failed to open wallet connect. Please try again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect Wallet" })).toBeInTheDocument();
+  });
+
+  it("clears a stale connect error the next time the menu is opened", async () => {
+    vi.mocked(openWalletConnectModal).mockRejectedValue(new Error("relay error"));
+    render(<Wallet />);
+    openMenu();
+    clickConnect();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Agree & Connect" }));
+    await screen.findByText("Failed to open wallet connect. Please try again.");
+
+    // Close (Cancel) then reopen - the old error shouldn't still be there,
+    // same as the associate-token error's equivalent test above.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    openMenu();
+
+    expect(screen.queryByText("Failed to open wallet connect. Please try again.")).not.toBeInTheDocument();
+  });
+
   it("Back returns to the normal menu without opening the connector", () => {
     render(<Wallet />);
     openMenu();

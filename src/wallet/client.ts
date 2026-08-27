@@ -48,14 +48,43 @@ const initializeWalletConnect = async () => {
   if (walletConnectInitPromise === undefined) {
     walletConnectInitPromise = dappConnector.init();
   }
-  await walletConnectInitPromise;
+  try {
+    await walletConnectInitPromise;
+  } catch (err) {
+    // Bug found 2026-08-27 investigating a live "Connect Wallet does
+    // nothing" report: without this, a rejected init() (e.g. a transient
+    // relay hiccup) got cached here forever - every later connect attempt
+    // just replayed the same stale rejection instead of ever retrying.
+    // Clearing it lets the next click genuinely try again.
+    walletConnectInitPromise = undefined;
+    throw err;
+  }
 };
 
+// Long enough that a real, working connect attempt is never cut off early
+// (QR render, wallet listing fetch, relay handshake all normally finish in
+// a couple seconds); short enough that a genuinely hung attempt (e.g. the
+// relay unreachable) surfaces as a real error instead of leaving the pill
+// silently unresponsive forever - the other half of the same investigation
+// above.
+const CONNECT_TIMEOUT_MS = 20_000;
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Wallet connect timed out")), ms);
+    }),
+  ]);
+
 export const openWalletConnectModal = async () => {
-  await initializeWalletConnect();
-  await dappConnector.openModal().then(() => {
-    refreshEvent.emit("sync");
-  });
+  await withTimeout(initializeWalletConnect(), CONNECT_TIMEOUT_MS);
+  await withTimeout(
+    dappConnector.openModal().then(() => {
+      refreshEvent.emit("sync");
+    }),
+    CONNECT_TIMEOUT_MS
+  );
 };
 
 // Fire-and-forget, same as auditClient - dol-lib's acceptTerms is

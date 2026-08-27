@@ -4,6 +4,7 @@ import { CollectionMintStatus } from "@erikmuir/dol-lib/types";
 import { CartContextProvider, addToBag } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
 import { fetchStandardJson } from "@/utils";
+import { openWalletConnectModal } from "@/wallet";
 import { MintAction, MintActionProps } from "./MintAction";
 
 const associateToken = vi.fn();
@@ -97,6 +98,7 @@ beforeEach(() => {
   });
   vi.mocked(addToBag).mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchStandardJson).mockReset().mockResolvedValue(undefined);
+  vi.mocked(openWalletConnectModal).mockReset().mockResolvedValue(undefined);
   const modalRoot = document.createElement("div");
   modalRoot.id = "modal-root";
   document.body.appendChild(modalRoot);
@@ -149,13 +151,24 @@ describe("MintAction", () => {
   // Erik's call (session note): an unconnected user seeing the price is
   // intentional, not gated on lockedBy/collection status.
   it("shows the price and opens wallet connect when not connected", async () => {
-    const { openWalletConnectModal } = await import("@/wallet");
     renderMintAction({ accountId: null });
 
     const button = screen.getByRole("button", { name: "Mint: 46 ℏ" });
     fireEvent.click(button);
 
     expect(openWalletConnectModal).toHaveBeenCalledTimes(1);
+  });
+
+  // Bug reported live on preview (2026-08-27): a failed connect attempt
+  // (e.g. the wallet's relay subscription failing) used to have nowhere to
+  // surface at all - the pill just sat there and nothing else happened.
+  it("shows an error when the connect attempt fails", async () => {
+    vi.mocked(openWalletConnectModal).mockRejectedValue(new Error("relay error"));
+    renderMintAction({ accountId: null });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mint: 46 ℏ" }));
+
+    expect(await screen.findByText("Failed to open wallet connect. Please try again.")).toBeInTheDocument();
   });
 
   describe("not associated", () => {
