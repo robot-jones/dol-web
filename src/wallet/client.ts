@@ -186,20 +186,30 @@ class WalletConnectWallet implements WalletInterface {
     } catch (err) {
       console.error("Failed transfer transaction:", err);
     } finally {
-      const accountId = this.getAccountId();
-      // One atomic transaction, so every item shares the same
-      // success/transactionId - all-or-nothing, per Hedera's own semantics.
-      await Promise.all(
-        items.map((item) =>
-          auditClient("NFT_PURCHASE", success, accountId, {
-            tokenId: item.nftId.tokenId.toString(),
-            serial: item.nftId.serial.toNumber(),
-            showDate: item.showDate,
-            position: item.position,
-            transactionId,
-          })
-        )
-      );
+      // getAccountId() calls getSigner() again, which throws if the
+      // wallet disconnected between the try block's initial getSigner()
+      // call and here - previously unguarded, so that throw escaped the
+      // whole method uncaught instead of being swallowed like the try
+      // block's own failures are. `success` is already decided by this
+      // point, so a failed audit-log write shouldn't mask the real result.
+      try {
+        const accountId = this.getAccountId();
+        // One atomic transaction, so every item shares the same
+        // success/transactionId - all-or-nothing, per Hedera's own semantics.
+        await Promise.all(
+          items.map((item) =>
+            auditClient("NFT_PURCHASE", success, accountId, {
+              tokenId: item.nftId.tokenId.toString(),
+              serial: item.nftId.serial.toNumber(),
+              showDate: item.showDate,
+              position: item.position,
+              transactionId,
+            })
+          )
+        );
+      } catch (err) {
+        console.error("Failed to write NFT_PURCHASE audit log:", err);
+      }
     }
     return success;
   }

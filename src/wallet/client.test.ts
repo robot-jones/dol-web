@@ -214,12 +214,19 @@ describe("WalletConnectWallet", () => {
       expect(bodies[0].context.transactionId).toBeTruthy();
     });
 
-    it("throws when no wallet is connected", async () => {
+    // Fixed 2026-08-28: the finally block's own getAccountId() call used
+    // to be unguarded, so a signer-less finally (same failure as the
+    // initial getSigner() call in try) rejected the whole method instead
+    // of resolving false like every other failure path here does. No
+    // audit entry is written either - there's no accountId to attribute
+    // it to.
+    it("resolves false, without throwing, when no wallet is connected", async () => {
       const tx = makeSignedTx("SUCCESS");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await expect(walletConnectWallet.purchaseNfts(tx as any, items)).rejects.toThrow(
-        "No signers found!"
-      );
+      const success = await walletConnectWallet.purchaseNfts(tx as any, items);
+
+      expect(success).toBe(false);
+      expect(fetchJsonMock).not.toHaveBeenCalled();
     });
   });
 
