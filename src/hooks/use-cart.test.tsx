@@ -85,6 +85,31 @@ describe("useCart", () => {
     expect(result.current.items).toHaveLength(10);
   });
 
+  // Bug fixed 2026-08-28 (CART.md): addPendingItem's own capacity check
+  // used to read `items` from the render closure directly, which doesn't
+  // reflect calls made earlier in the same synchronous batch (React's
+  // functional setItems updater doesn't run until React processes the
+  // queued update, not synchronously as each call is made) - so a run of
+  // calls landing right at the MAX_CART_ITEMS boundary within one batch
+  // could report `true` (added) for more calls than actually got added,
+  // even though the underlying state itself stayed correctly capped at 10.
+  // All 11 calls here happen in one act() block, deliberately, to
+  // reproduce that same-batch condition rather than one add per render.
+  it("reports the true per-call result even when a run of adds lands right at the cap in one batch", async () => {
+    const { result } = renderUseCart();
+    await waitFor(() => expect(result.current.items).toEqual([]));
+
+    const added: boolean[] = [];
+    act(() => {
+      for (let position = 1; position <= 11; position++) {
+        added.push(result.current.addPendingItem("1998-07-29", position, `Song ${position}`));
+      }
+    });
+
+    expect(added).toEqual([true, true, true, true, true, true, true, true, true, true, false]);
+    expect(result.current.items).toHaveLength(10);
+  });
+
   it("resolvePendingItem replaces a pending entry with its ready form", async () => {
     const { result } = renderUseCart();
     await waitFor(() => expect(result.current.items).toEqual([]));
@@ -204,6 +229,50 @@ describe("useCart", () => {
 
     const { result } = renderUseCart();
     await waitFor(() => expect(result.current.items).toEqual([readyItem2]));
+  });
+
+  // A dropped pending item used to just vanish with no explanation -
+  // added 2026-08-28 so a reload mid-add is at least visible via
+  // lastError, even though the item itself still isn't recovered (that
+  // would need wallet-aware reconciliation, out of scope for this pass -
+  // the affected performance page's own lockedBy fallback remains the
+  // actual recovery path).
+  it("surfaces dropped pending items via lastError, singular", async () => {
+    sessionStorage.setItem(
+      "dol-cart",
+      JSON.stringify([
+        { status: "pending", showDate: "1998-07-29", position: 1, song: "Runaway Jim", addedAt: Date.now() },
+        readyItem2,
+      ])
+    );
+
+    const { result } = renderUseCart();
+    await waitFor(() => expect(result.current.items).toEqual([readyItem2]));
+    expect(result.current.lastError).toMatch(/^1 item you were adding got interrupted by the reload/);
+    expect(result.current.lastError).toMatch(/revisit its performance page/);
+  });
+
+  it("surfaces dropped pending items via lastError, pluralized for more than one", async () => {
+    sessionStorage.setItem(
+      "dol-cart",
+      JSON.stringify([
+        { status: "pending", showDate: "1998-07-29", position: 1, song: "Runaway Jim", addedAt: Date.now() },
+        { status: "pending", showDate: "1998-07-29", position: 2, song: "Wilson", addedAt: Date.now() },
+      ])
+    );
+
+    const { result } = renderUseCart();
+    await waitFor(() => expect(result.current.items).toEqual([]));
+    expect(result.current.lastError).toMatch(/^2 items you were adding got interrupted by the reload/);
+    expect(result.current.lastError).toMatch(/revisit their performance pages/);
+  });
+
+  it("does not set lastError on hydration when nothing was dropped", async () => {
+    sessionStorage.setItem("dol-cart", JSON.stringify([readyItem1]));
+
+    const { result } = renderUseCart();
+    await waitFor(() => expect(result.current.items).toEqual([readyItem1]));
+    expect(result.current.lastError).toBeNull();
   });
 
   it("does not clobber sessionStorage with the pre-hydration empty state", async () => {
