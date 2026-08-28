@@ -26,6 +26,16 @@ vi.mock("@/hooks/use-account-status", () => ({
   useAccountStatus: () => ({ mutateAccountStatus }),
 }));
 
+// Overrides vitest.setup.ts's global next/navigation mock, which hands
+// back a brand new push: vi.fn() on every render - fine for components
+// that just call it, but useless for asserting what it was called with.
+// A stable reference here is what makes that assertable.
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  usePathname: () => "/",
+}));
+
 // PageNote (rendered by Bag itself) also imports from @/utils - mock only
 // fetchStandardJson, keep everything else real.
 vi.mock("@/utils", async (importOriginal) => ({
@@ -56,6 +66,7 @@ beforeEach(() => {
   sessionStorage.clear();
   purchaseNfts.mockReset();
   mutateAccountStatus.mockReset();
+  push.mockReset();
   useWalletInterfaceMock.mockReset().mockReturnValue({
     accountId: "0.0.1",
     walletInterface: { purchaseNfts },
@@ -369,6 +380,9 @@ describe("Bag", () => {
       // whitelist status. Finalize moved here on the hard cutover - this
       // is what keeps that same revalidation happening.
       expect(mutateAccountStatus).toHaveBeenCalledTimes(1);
+      // Erik's idea (CART.md): once something actually finalized, send the
+      // buyer straight to their Stash to see what they just got.
+      expect(push).toHaveBeenCalledWith("/stash");
     });
 
     it("does not revalidate account status when nothing actually got purchased", async () => {
@@ -384,6 +398,9 @@ describe("Bag", () => {
 
       await screen.findByText(/didn't confirm the transaction/);
       expect(mutateAccountStatus).not.toHaveBeenCalled();
+      // Nothing was purchased - items are still in the bag for a retry,
+      // so navigating away would be actively unhelpful here.
+      expect(push).not.toHaveBeenCalled();
     });
 
     // Erik's call (CART.md): a declined/failed signature leaves the bag
@@ -422,6 +439,9 @@ describe("Bag", () => {
 
       expect(await screen.findByText(/expired and were removed.*Wilson/)).toBeInTheDocument();
       await waitFor(() => expect(screen.getByText("Your bag is empty.")).toBeInTheDocument());
+      // Runaway Jim still finalized despite Wilson expiring - still worth
+      // sending them to see it.
+      expect(push).toHaveBeenCalledWith("/stash");
     });
 
     it("shows a notice and makes no request with no wallet connected", () => {
@@ -431,6 +451,7 @@ describe("Bag", () => {
 
       expect(screen.getByText("Connect your wallet to check out.")).toBeInTheDocument();
       expect(fetchStandardJson).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
     });
 
     it("shows an error notice if the checkout request itself fails", async () => {
@@ -441,6 +462,7 @@ describe("Bag", () => {
 
       expect(await screen.findByText(/Something went wrong starting checkout/)).toBeInTheDocument();
       expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
     });
 
     describe("Confirm Mint gate", () => {

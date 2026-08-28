@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
@@ -21,6 +22,7 @@ import Modal from "./Modal";
 export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
+  const router = useRouter();
   const { items, removeItem, lastError, clearLastError } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
   const { mutateAccountStatus } = useAccountStatus(accountId);
@@ -195,6 +197,13 @@ export const Bag = () => {
       // cached one. Performance.tsx's old single-item flow did this same
       // revalidation at the equivalent point (CART.md: known gap, now fixed).
       mutateAccountStatus();
+      // Only reached once at least one item actually finalized (the
+      // declined-wallet and all-expired paths both return above, leaving
+      // items in the bag for a retry) - navigating away from those would
+      // be actively unhelpful. Closes the bag first so it doesn't carry
+      // over open onto the new page.
+      setOpen(false);
+      router.push("/stash");
     } catch (err) {
       console.error("Checkout request failed:", err);
       setNotice("Something went wrong starting checkout. Please try again.");
