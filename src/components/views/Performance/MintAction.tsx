@@ -189,6 +189,12 @@ export const MintAction = ({
   // The old "Confirm Mint" modal moved to Checkout - what gates this
   // click now is the one-time bag-intro modal below, not a per-click
   // confirmation.
+  //
+  // Also opens the Bag itself (Erik's call, 2026-08-28) - so the click
+  // shows both that it landed and that prepare() is actively working on
+  // it, not just a pill flip on a page they might navigate away from
+  // before checking. requestBagOpen is a fire-and-forget signal (@/cart) -
+  // Bag.tsx owns whether/how it's actually shown.
   const handleAddToBagClick = () => {
     if (!pageLoaded || !hasSetlist || !accountId) {
       return;
@@ -213,6 +219,7 @@ export const MintAction = ({
       console.error("Failed to read bag-intro-seen flag:", err);
     }
     if (seenIntro) {
+      cart.requestBagOpen();
       addToBag(cart, accountId, showDate, position, attributes);
     } else {
       setShowBagIntro(true);
@@ -229,6 +236,7 @@ export const MintAction = ({
       console.error("Failed to persist bag-intro-seen flag:", err);
     }
     if (accountId) {
+      cart.requestBagOpen();
       addToBag(cart, accountId, showDate, position, attributes);
     }
   };

@@ -76,6 +76,13 @@ const SeedItems = ({
   return null;
 };
 
+// Observes cart.bagOpenRequestCount via the same public API Bag.tsx itself
+// reads it through - not reaching into context internals.
+const BagOpenRequestCounter = () => {
+  const cart = useCart();
+  return <div data-testid="bag-open-request-count">{cart.bagOpenRequestCount}</div>;
+};
+
 const renderMintAction = (
   props: Partial<MintActionProps> = {},
   seedItems: { showDate: string; position: number; song: string; serial?: number; lockedAt?: number }[] = []
@@ -324,6 +331,41 @@ describe("MintAction", () => {
     it("shows Add to Bag when open", () => {
       renderMintAction({ collectionMintStatus: CollectionMintStatus.OPEN });
       expect(screen.getByRole("button", { name: "Add to Bag · 46 ℏ" })).toBeInTheDocument();
+    });
+  });
+
+  // Erik's call (CART.md, 2026-08-28): Add to Bag should also open the Bag
+  // itself, so the buyer sees both that it landed and that prepare() is
+  // actively working on it, not just a pill flip on a page they might
+  // navigate away from before checking.
+  describe("opening the Bag on Add to Bag", () => {
+    it("requests the Bag open when the intro has already been seen", () => {
+      localStorage.setItem("dol-bag-intro-seen", "true");
+      render(
+        <CartContextProvider>
+          <BagOpenRequestCounter />
+          <MintAction {...baseProps} />
+        </CartContextProvider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Add to Bag · 46 ℏ" }));
+
+      expect(screen.getByTestId("bag-open-request-count")).toHaveTextContent("1");
+    });
+
+    it("requests the Bag open on OK from the intro modal, not before", () => {
+      render(
+        <CartContextProvider>
+          <BagOpenRequestCounter />
+          <MintAction {...baseProps} />
+        </CartContextProvider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Add to Bag · 46 ℏ" }));
+      expect(screen.getByTestId("bag-open-request-count")).toHaveTextContent("0");
+
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+      expect(screen.getByTestId("bag-open-request-count")).toHaveTextContent("1");
     });
   });
 

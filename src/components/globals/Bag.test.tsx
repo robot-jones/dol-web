@@ -107,6 +107,18 @@ const Seeded = ({ items }: { items: CartItem[] }) => (
   </CartContextProvider>
 );
 
+// Simulates MintAction.tsx's Add to Bag click calling cart.requestBagOpen()
+// from outside Bag.tsx entirely - same public API, not reaching into
+// context internals.
+const RequestsBagOpen = () => {
+  const cart = useCart();
+  useEffect(() => {
+    cart.requestBagOpen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+};
+
 describe("Bag", () => {
   it("shows no badge when the bag is empty", () => {
     render(
@@ -130,6 +142,42 @@ describe("Bag", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
     expect(screen.getByText("Your bag is empty.")).toBeInTheDocument();
+  });
+
+  describe("requestBagOpen", () => {
+    it("does not open on its own just from mounting", () => {
+      render(
+        <CartContextProvider>
+          <Bag />
+        </CartContextProvider>
+      );
+      expect(screen.queryByText("Your bag is empty.")).not.toBeInTheDocument();
+    });
+
+    // Erik's call (CART.md): Add to Bag should also open the Bag, so the
+    // buyer sees both that it landed and that prepare() is actively
+    // working on it, not just a pill flip on a page they might navigate
+    // away from.
+    it("opens itself when something outside requests it, with no click needed", () => {
+      render(
+        <CartContextProvider>
+          <RequestsBagOpen />
+          <Bag />
+        </CartContextProvider>
+      );
+      expect(screen.getByText("Your bag is empty.")).toBeInTheDocument();
+    });
+
+    it("shows items already in the bag when opened this way", () => {
+      render(
+        <CartContextProvider>
+          <SeedItems items={[item1]} />
+          <RequestsBagOpen />
+          <Bag />
+        </CartContextProvider>
+      );
+      expect(screen.getByText("Runaway Jim")).toBeInTheDocument();
+    });
   });
 
   it("lists each item's song and date when opened", () => {

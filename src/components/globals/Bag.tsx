@@ -23,7 +23,7 @@ export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
   const router = useRouter();
-  const { items, removeItem, lastError, clearLastError } = useCart();
+  const { items, removeItem, lastError, clearLastError, bagOpenRequestCount } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
   const { mutateAccountStatus } = useAccountStatus(accountId);
   const [open, setOpen] = useState(false);
@@ -51,6 +51,16 @@ export const Bag = () => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [open]);
+
+  // Opens on request from outside (Add to Bag, on a performance page) -
+  // so the buyer sees both that it landed and that prepare() is actively
+  // working on their behalf, not just a pill flipping to "In Your Bag" on
+  // a page they may have already navigated away from. Guarded on `> 0`,
+  // not just "changed" - the count starts at 0, and effects run once on
+  // mount too, which isn't a real request.
+  useEffect(() => {
+    if (bagOpenRequestCount > 0) setOpen(true);
+  }, [bagOpenRequestCount]);
 
   const handleBagClick = () => setOpen(!open);
   const handleClose = () => {

@@ -38,6 +38,15 @@ export type CartContextValue = {
   clearLastError: () => void;
   removeItem: (showDate: string, position: number) => void;
   clear: () => void;
+  // Lets something outside the Bag (Add to Bag on a performance page) ask
+  // it to open itself - a counter, not a boolean, since Bag.tsx already
+  // owns its own open/closed state (and all the reasons it closes itself -
+  // checkout, navigation, etc.); this is purely a one-way "please open"
+  // signal it listens for, not shared open/closed state. Starts at 0,
+  // meaning "never requested" - Bag.tsx only reacts to it increasing past
+  // that, so mounting doesn't itself count as a request.
+  bagOpenRequestCount: number;
+  requestBagOpen: () => void;
 };
 
 const defaultContext: CartContextValue = {
@@ -49,6 +58,8 @@ const defaultContext: CartContextValue = {
   clearLastError: () => {},
   removeItem: () => {},
   clear: () => {},
+  bagOpenRequestCount: 0,
+  requestBagOpen: () => {},
 };
 
 export const CartContext: Context<CartContextValue> = createContext(defaultContext);
@@ -66,6 +77,7 @@ export const CartContextProvider = (props: {
 }) => {
   const [items, setItems] = useState<CartItem[]>(defaultContext.items);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [bagOpenRequestCount, setBagOpenRequestCount] = useState(0);
   // Reading sessionStorage has to happen in an effect, not the useState
   // initializer - it's unavailable during SSR, and seeding real data into
   // the initializer would mismatch the server-rendered empty state.
@@ -153,9 +165,22 @@ export const CartContextProvider = (props: {
 
   const clear = () => setItems([]);
 
+  const requestBagOpen = () => setBagOpenRequestCount((prev) => prev + 1);
+
   return (
     <CartContext.Provider
-      value={{ items, addPendingItem, resolvePendingItem, failPendingItem, lastError, clearLastError, removeItem, clear }}
+      value={{
+        items,
+        addPendingItem,
+        resolvePendingItem,
+        failPendingItem,
+        lastError,
+        clearLastError,
+        removeItem,
+        clear,
+        bagOpenRequestCount,
+        requestBagOpen,
+      }}
     >
       {props.children}
     </CartContext.Provider>
