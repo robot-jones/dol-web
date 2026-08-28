@@ -15,6 +15,7 @@ const confirmMetadataOnChainMock = vi.fn();
 const getPerformanceMock = vi.fn();
 const getAccountMock = vi.fn();
 const getAppConfigMock = vi.fn();
+const countLockedPerformancesMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
   setImageCid: (...a: unknown[]) => setImageCidMock(...a),
@@ -22,6 +23,7 @@ vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
+  countLockedPerformances: (...a: unknown[]) => countLockedPerformancesMock(...a),
 }));
 
 process.env.NEXT_PUBLIC_HFB_COLLECTION_ID = "0.0.token";
@@ -199,5 +201,29 @@ describe("/api/mint/[accountId]/[showDate]/[position]/prepare POST", () => {
 
     expect(body.ok).toBe(false);
     expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  // See mint-gate.test.ts for the full presale-cap matrix - this just
+  // confirms the route wires it in ahead of claimPerformance.
+  it("refuses a second concurrent presale lock instead of claiming", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false, launchedAt: undefined });
+    countLockedPerformancesMock.mockResolvedValue(1);
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.TOO_MANY_LOCKED);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a presale account's first lock through to claimPerformance", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false, launchedAt: undefined });
+    countLockedPerformancesMock.mockResolvedValue(0);
+
+    await call("0.0.1", "1998-07-29", "1");
+
+    expect(claimPerformanceMock).toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/ty
 import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate, releaseClaim } from "@erikmuir/dol-lib/server/dapp";
 import { setPublishedCids, setImageCid, confirmMetadataOnChain, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
-import { canMint } from "@/mint-gate";
+import { canMint, canLockAnotherPresaleItem } from "@/mint-gate";
 
 // /api/mint/[accountId]/[showDate]/[position]/prepare
 //
@@ -41,6 +41,12 @@ export async function POST(
 
   if (!(await canMint(accountId))) {
     return badRequest("Minting is disabled");
+  }
+
+  // See mint-gate.ts: closes the presale multi-item finalize bug off at
+  // its root, rather than patching it after the fact.
+  if (!(await canLockAnotherPresaleItem(accountId))) {
+    return success({ serial: SerialErrorResponse.TOO_MANY_LOCKED });
   }
 
   const attributes: PerformanceAttributes = await req.json();
