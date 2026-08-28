@@ -1,50 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Hbar, TransferTransaction } from "@hashgraph/sdk";
 import { PublicEnvKeys, getRequired } from "@erikmuir/dol-lib/env";
-import { PerformanceAttributes, SerialErrorResponse, Uint8ArrayWrapper } from "@erikmuir/dol-lib/types";
-import { getHederaClient } from "@erikmuir/dol-lib/server/blockchain";
+import { PerformanceAttributes, SerialErrorResponse } from "@erikmuir/dol-lib/types";
 import { claimPerformance, publishNftMetadata, submitNftMetadataUpdate, releaseClaim } from "@erikmuir/dol-lib/server/dapp";
 import { setPublishedCids, setImageCid, confirmMetadataOnChain, getPerformance } from "@erikmuir/dol-lib/server/dynamo";
 import { badRequest, StandardPayload, success } from "@/utils";
-import { canMint } from "@/mint-gate";
+import { canMint, canLockAnotherPresaleItem } from "@/mint-gate";
 
-// /api/mint/[accountId]/[showDate]/[position] (pre-transfer endpoint)
+// /api/mint/[accountId]/[showDate]/[position]/prepare
 //
-// Claims the performance, then does the slow/failure-prone work (render, 2
-// IPFS uploads, the on-chain metadata update) before any money moves -
-// any failure in that chain is still a pre-payment failure, claim
-// released immediately. This used to run post-transfer, which couldn't
-// tell "never signed" apart from "signed, but the metadata tx failed."
+// AC/DC Bag (CART.md, checklist item 1): the "Add to Bag" step. Same
+// claim-then-publish work as the single-item pre-transfer route
+// (../route.ts), minus building the TransferTransaction - that now
+// belongs to the (not yet built) checkout endpoint, which builds one
+// transaction covering every prepared item at once. Called once per
+// "Add to Bag" click, up to 10x (Hedera's per-transfer NFT-leg limit).
 //
 // 60s (Vercel's Hobby-tier cap) - a cold start (chromium extraction,
 // render, two sequential Pinata uploads) routinely exceeds the 10s default.
 export const maxDuration = 60;
 
-export type PreTransferParams = {
+export type PrepareParams = {
   accountId: string;
   showDate: string;
   position: string;
 };
 
-export type ServerPreTransferResponse = {
+export type ServerPrepareResponse = {
   serial: number | SerialErrorResponse;
-  txBytes?: Uint8ArrayWrapper;
   lockedAt?: number;
 };
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<PreTransferParams> }
-): Promise<NextResponse<StandardPayload<ServerPreTransferResponse | string>>> {
+  { params }: { params: Promise<PrepareParams> }
+): Promise<NextResponse<StandardPayload<ServerPrepareResponse | string>>> {
   const { showDate, position, accountId } = await params;
   const parsedPosition = parseInt(position);
 
-  const hfbHbarPrice = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_HBAR_PRICE);
-  const treasuryAccount = getRequired(PublicEnvKeys.NEXT_PUBLIC_TREASURY_ACCOUNT);
   const hfbCollectionId = getRequired(PublicEnvKeys.NEXT_PUBLIC_HFB_COLLECTION_ID);
 
   if (!(await canMint(accountId))) {
     return badRequest("Minting is disabled");
+  }
+
+  // See mint-gate.ts: closes the presale multi-item finalize bug off at
+  // its root, rather than patching it after the fact.
+  if (!(await canLockAnotherPresaleItem(accountId))) {
+    return success({ serial: SerialErrorResponse.TOO_MANY_LOCKED });
   }
 
   const attributes: PerformanceAttributes = await req.json();
@@ -116,25 +118,9 @@ export async function POST(
     console.error(`Failed to record on-chain metadata confirmation: ${confirmResult.reason}`);
   }
 
-  const client = getHederaClient();
-
-  const transaction = new TransferTransaction()
-    .addHbarTransfer(accountId, new Hbar(-hfbHbarPrice))
-    .addHbarTransfer(treasuryAccount, new Hbar(hfbHbarPrice))
-    .addNftTransfer(hfbCollectionId, serial, treasuryAccount, accountId)
-    .freezeWith(client);
-  const signedTx = await transaction.signWithOperator(client);
-  // Explicit { type: "Buffer", data: [...] } shape, not a raw Uint8Array -
-  // JSON.stringify on a bare Uint8Array produces {"0":n,"1":n,...}, which
-  // the client's `new Uint8Array(txBytes.data)` can't reconstruct.
-  const txBytes: Uint8ArrayWrapper = {
-    type: "Buffer",
-    data: Array.from(signedTx.toBytes()),
-  };
-
   // So the client can show "Locked for mm:ss" immediately, without
   // waiting on a reload to pick up the server-side value.
   const claimedPerformance = await getPerformance(showDate, parsedPosition);
 
-  return success({ serial, txBytes, lockedAt: claimedPerformance?.lockedAt });
+  return success({ serial, lockedAt: claimedPerformance?.lockedAt });
 }

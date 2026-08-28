@@ -8,6 +8,7 @@ export const Wallet = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const [open, setOpen] = useState(false);
   const [associateError, setAssociateError] = useState(false);
+  const [connectError, setConnectError] = useState(false);
   // Whether the connect-confirmation step (checkbox + Agree) is showing, in
   // place of the normal menu. Scoped to the Connect Wallet action itself,
   // not the whole menu - Disconnect/Associate Token stay reachable without
@@ -38,6 +39,7 @@ export const Wallet = () => {
 
   const handleAccountClick = async () => {
     setAssociateError(false);
+    setConnectError(false);
     setOpen(!open);
   };
 
@@ -46,11 +48,27 @@ export const Wallet = () => {
     setShowConsent(true);
   }, []);
 
-  const handleAgreeClick = useCallback(() => {
+  // Bug reported live on preview (2026-08-27): this used to fire
+  // openWalletConnectModal and close the panel in the same tick without
+  // waiting to see if it actually succeeded - a failed connect attempt
+  // (e.g. the wallet's relay subscription failing) then had nowhere to
+  // surface at all, so it just looked like nothing happened. Still closes
+  // immediately on the happy path (the WC modal itself takes over from
+  // here) - only reopens, with a visible message, if the attempt actually
+  // fails.
+  const handleAgreeClick = useCallback(async () => {
+    setConnectError(false);
     pendingAcceptance.current = true;
-    openWalletConnectModal();
     setShowConsent(false);
     setOpen(false);
+    try {
+      await openWalletConnectModal();
+    } catch (err) {
+      console.error("Failed to open wallet connect:", err);
+      pendingAcceptance.current = false;
+      setConnectError(true);
+      setOpen(true);
+    }
   }, []);
 
   const handleConsentCancelClick = useCallback(() => {
@@ -148,7 +166,14 @@ export const Wallet = () => {
               {accountId ? (
                 <DolButton color="red" fullWidth onClick={handleDisconnectClick}>Disconnect</DolButton>
               ) : (
-                <DolButton color="green" fullWidth onClick={handleConnectClick}>Connect Wallet</DolButton>
+                <>
+                  <DolButton color="green" fullWidth onClick={handleConnectClick}>Connect Wallet</DolButton>
+                  {connectError && (
+                    <div className="text-xs text-dol-red text-center">
+                      Failed to open wallet connect. Please try again.
+                    </div>
+                  )}
+                </>
               )}
               {accountId && !isAssociated && (
                 <>

@@ -7,7 +7,6 @@ import {
   LedgerId,
   TokenAssociateTransaction,
   TokenId,
-  NftId,
   Transaction,
 } from "@hashgraph/sdk";
 import {
@@ -20,7 +19,7 @@ import type { ActionContext } from "@erikmuir/dol-lib/types";
 import { sleep } from "@erikmuir/dol-lib/utils";
 import { fetchJson } from "@/utils";
 import { WalletConnectContext } from "./context";
-import { WalletInterface } from "./wallet-interface";
+import { PurchaseNftItem, WalletInterface } from "./wallet-interface";
 
 // Created refreshEvent because `dappConnector.walletConnectClient.on(eventName, syncWithWalletConnectContext)` would not call syncWithWalletConnectContext
 // Reference usage from walletconnect implementation https://github.com/hashgraph/hedera-wallet-connect/blob/main/src/lib/dapp/index.ts#L120C1-L124C9
@@ -49,14 +48,60 @@ const initializeWalletConnect = async () => {
   if (walletConnectInitPromise === undefined) {
     walletConnectInitPromise = dappConnector.init();
   }
-  await walletConnectInitPromise;
+  try {
+    await walletConnectInitPromise;
+  } catch (err) {
+    // Bug found 2026-08-27 investigating a live "Connect Wallet does
+    // nothing" report: without this, a rejected init() (e.g. a transient
+    // relay hiccup) got cached here forever - every later connect attempt
+    // just replayed the same stale rejection instead of ever retrying.
+    // Clearing it lets the next click genuinely try again.
+    walletConnectInitPromise = undefined;
+    throw err;
+  }
 };
 
+// Long enough that a real, working connect attempt is never cut off early
+// (QR render, wallet listing fetch, relay handshake all normally finish in
+// a couple seconds); short enough that a genuinely hung attempt (e.g. the
+// relay unreachable) surfaces as a real error instead of leaving the pill
+// silently unresponsive forever - the other half of the same investigation
+// above.
+const CONNECT_TIMEOUT_MS = 20_000;
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error("Wallet connect timed out")), ms);
+    }),
+  ]);
+
 export const openWalletConnectModal = async () => {
-  await initializeWalletConnect();
-  await dappConnector.openModal().then(() => {
-    refreshEvent.emit("sync");
-  });
+  await withTimeout(initializeWalletConnect(), CONNECT_TIMEOUT_MS);
+  try {
+    // throwErrorOnReject (default false, per the library) is what makes
+    // closing the modal without connecting actually settle the promise at
+    // all - left at the default, it just hangs forever (indistinguishable
+    // from a genuine timeout), which is exactly what the 20s timeout above
+    // was catching as a false "Failed to open wallet connect" error - a
+    // deliberate close isn't a failure at all.
+    await withTimeout(
+      dappConnector.openModal(undefined, true).then(() => {
+        refreshEvent.emit("sync");
+      }),
+      CONNECT_TIMEOUT_MS
+    );
+  } catch (err) {
+    // Bug reported live 2026-08-27: closing the QR modal without ever
+    // opening a wallet isn't a failure - it's a deliberate cancel. Only
+    // real failures (timeout, relay errors, etc.) should propagate to
+    // callers as something worth showing an error for.
+    if (err instanceof Error && err.message === "User rejected pairing") {
+      return;
+    }
+    throw err;
+  }
 };
 
 // Fire-and-forget, same as auditClient - dol-lib's acceptTerms is
@@ -118,11 +163,15 @@ class WalletConnectWallet implements WalletInterface {
     return success;
   }
 
-  async purchaseNft(
+  // AC/DC Bag checkout - one TransferTransaction covering every item in
+  // the bag at once. The sign/execute/receipt call itself doesn't care how
+  // many transfer legs are in tx - the real work is the audit log, which
+  // needs one NFT_PURCHASE entry per item rather than a single
+  // tokenId/serial/showDate/position (replaced the old single-item
+  // purchaseNft, CART.md).
+  async purchaseNfts(
     tx: Transaction,
-    nftId: NftId,
-    showDate: string,
-    position: number
+    items: PurchaseNftItem[]
   ): Promise<boolean> {
     let success = false;
     let transactionId: string | undefined;
@@ -137,13 +186,30 @@ class WalletConnectWallet implements WalletInterface {
     } catch (err) {
       console.error("Failed transfer transaction:", err);
     } finally {
-      await auditClient("NFT_PURCHASE", success, this.getAccountId(), {
-        tokenId: nftId.tokenId.toString(),
-        serial: nftId.serial.toNumber(),
-        showDate,
-        position,
-        transactionId,
-      });
+      // getAccountId() calls getSigner() again, which throws if the
+      // wallet disconnected between the try block's initial getSigner()
+      // call and here - previously unguarded, so that throw escaped the
+      // whole method uncaught instead of being swallowed like the try
+      // block's own failures are. `success` is already decided by this
+      // point, so a failed audit-log write shouldn't mask the real result.
+      try {
+        const accountId = this.getAccountId();
+        // One atomic transaction, so every item shares the same
+        // success/transactionId - all-or-nothing, per Hedera's own semantics.
+        await Promise.all(
+          items.map((item) =>
+            auditClient("NFT_PURCHASE", success, accountId, {
+              tokenId: item.nftId.tokenId.toString(),
+              serial: item.nftId.serial.toNumber(),
+              showDate: item.showDate,
+              position: item.position,
+              transactionId,
+            })
+          )
+        );
+      } catch (err) {
+        console.error("Failed to write NFT_PURCHASE audit log:", err);
+      }
     }
     return success;
   }

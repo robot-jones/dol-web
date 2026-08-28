@@ -7,6 +7,8 @@ import { jost } from "@/styles/fonts";
 import "@/styles/globals.css";
 import { Metadata } from "next";
 import { WalletConnectContextProvider, WalletConnectClient } from "@/wallet";
+import { CartContextProvider } from "@/cart";
+import { CartValidator } from "@/cart/CartValidator";
 
 const title = "Duke of Lizards";
 const description = "A Phish-themed Web3 dApp built on Hedera";
@@ -52,15 +54,18 @@ export default async function RootLayout({
         <React.StrictMode>
           <Suspense>
             <WalletConnectContextProvider>
-              <WalletConnectClient />
-              <Header />
-              <main className="grow shrink-0 basis-auto m-4">
-                <div className="flex flex-col items-center mx-auto max-w-5xl mt-[var(--header-height)]">
-                  {children}
-                </div>
-              </main>
-              <Footer />
-              <div id="modal-root"></div>
+              <CartContextProvider>
+                <WalletConnectClient />
+                <CartValidator />
+                <Header />
+                <main className="grow shrink-0 basis-auto my-4 mx-0 sm:mx-4">
+                  <div className="flex flex-col items-center mx-auto max-w-5xl mt-[var(--header-height)]">
+                    {children}
+                  </div>
+                </main>
+                <Footer />
+                <div id="modal-root"></div>
+              </CartContextProvider>
             </WalletConnectContextProvider>
           </Suspense>
         </React.StrictMode>

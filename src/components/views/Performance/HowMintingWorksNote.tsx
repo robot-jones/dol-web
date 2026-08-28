@@ -2,15 +2,15 @@ import { twMerge } from "tailwind-merge";
 import { Disclosure } from "@/components/common/Disclosure";
 
 export type HowMintingWorksNoteProps = {
-  isMintable: boolean;
+  show: boolean;
 };
 
 const getAttributeTypeLabel = (text: string, className?: string) => (
   <span className={twMerge("font-bold", className)}>{text}</span>
 );
 
-export const HowMintingWorksNote = ({ isMintable }: HowMintingWorksNoteProps): React.ReactNode => {
-  if (!isMintable) return null;
+export const HowMintingWorksNote = ({ show }: HowMintingWorksNoteProps): React.ReactNode => {
+  if (!show) return null;
 
   const customizable = getAttributeTypeLabel("Customizable", "text-dol-yellow");
   const fixed = getAttributeTypeLabel("Fixed", "text-dol-blue");

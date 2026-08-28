@@ -15,6 +15,7 @@ const confirmMetadataOnChainMock = vi.fn();
 const getPerformanceMock = vi.fn();
 const getAccountMock = vi.fn();
 const getAppConfigMock = vi.fn();
+const countLockedPerformancesMock = vi.fn();
 vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   setPublishedCids: (...a: unknown[]) => setPublishedCidsMock(...a),
   setImageCid: (...a: unknown[]) => setImageCidMock(...a),
@@ -22,42 +23,9 @@ vi.mock("@erikmuir/dol-lib/server/dynamo", () => ({
   getPerformance: (...a: unknown[]) => getPerformanceMock(...a),
   getAccount: (...a: unknown[]) => getAccountMock(...a),
   getAppConfig: (...a: unknown[]) => getAppConfigMock(...a),
+  countLockedPerformances: (...a: unknown[]) => countLockedPerformancesMock(...a),
 }));
 
-vi.mock("@erikmuir/dol-lib/server/blockchain", () => ({
-  getHederaClient: () => ({}),
-}));
-
-// A signed transaction whose toBytes() returns real, non-trivial bytes -
-// this is the exact value that gets JSON-serialized in the response, so
-// the test can assert on its actual wire shape.
-const rawBytes = new Uint8Array([10, 245, 1, 42, 242, 1, 0]);
-const signedTx = { toBytes: () => rawBytes };
-const chainable = {
-  addHbarTransfer: vi.fn(function (this: unknown) { return this; }),
-  addNftTransfer: vi.fn(function (this: unknown) { return this; }),
-  freezeWith: vi.fn(function (this: unknown) { return this; }),
-  signWithOperator: vi.fn(async () => signedTx),
-};
-vi.mock("@hashgraph/sdk", () => ({
-  // Both must be constructable (`new Hbar(...)`, `new TransferTransaction()`),
-  // not plain arrow function mocks - classes returning a fixed value work
-  // for asserting call args without modeling the real fluent API.
-  Hbar: class {
-    amount: number;
-    constructor(amount: number) {
-      this.amount = amount;
-    }
-  },
-  TransferTransaction: class {
-    constructor() {
-      return chainable;
-    }
-  },
-}));
-
-process.env.NEXT_PUBLIC_HFB_HBAR_PRICE = "46";
-process.env.NEXT_PUBLIC_TREASURY_ACCOUNT = "0.0.treasury";
 process.env.NEXT_PUBLIC_HFB_COLLECTION_ID = "0.0.token";
 
 import { SerialErrorResponse } from "@erikmuir/dol-lib/types";
@@ -71,7 +39,7 @@ const call = async (accountId: string, showDate: string, position: string) =>
     params: Promise.resolve({ accountId, showDate, position }),
   });
 
-describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
+describe("/api/mint/[accountId]/[showDate]/[position]/prepare POST", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     claimPerformanceMock.mockResolvedValue(7);
@@ -85,17 +53,15 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     getAppConfigMock.mockResolvedValue({ mintEnabled: true });
   });
 
-  it("returns txBytes as an explicit Buffer-shaped wrapper the client can reconstruct from", async () => {
+  // Unlike the single-item pre-transfer route, prepare stops short of
+  // building a TransferTransaction at all - that's the (not yet built)
+  // checkout endpoint's job, once per bag rather than once per item.
+  it("returns the serial with no txBytes", async () => {
     const res = await call("0.0.1", "1998-07-29", "1");
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.data.serial).toBe(7);
-    // This is the whole point of the test: JSON.stringify on a raw
-    // Uint8Array produces {"0":n,"1":n,...}, not this shape - see
-    // PUNCHLIST.md Finding 17. Reconstructing with
-    // `new Uint8Array(body.data.txBytes.data)` must round-trip exactly.
-    expect(body.data.txBytes).toEqual({ type: "Buffer", data: Array.from(rawBytes) });
-    expect(new Uint8Array(body.data.txBytes.data)).toEqual(rawBytes);
+    expect(body.data.txBytes).toBeUndefined();
   });
 
   it("includes lockedAt so the client can show the elapsed-lock timer immediately, not just after a reload", async () => {
@@ -105,7 +71,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     expect(getPerformanceMock).toHaveBeenCalledWith("1998-07-29", 1);
   });
 
-  it("submits the on-chain metadata update before building the transfer transaction, using the pre-computed CID", async () => {
+  it("submits the on-chain metadata update using the pre-computed CID", async () => {
     await call("0.0.1", "1998-07-29", "1");
     expect(submitNftMetadataUpdateMock).toHaveBeenCalledWith(
       "0.0.token",
@@ -122,7 +88,7 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
   // (metadataCid alone isn't enough - it's written beforehand regardless of
   // chain outcome), so an abandoned claim past this point gets its serial
   // reset to the placeholder on release instead of left stale.
-  it("confirms the on-chain metadata update once it succeeds, before building the transfer transaction", async () => {
+  it("confirms the on-chain metadata update once it succeeds", async () => {
     await call("0.0.1", "1998-07-29", "1");
     expect(confirmMetadataOnChainMock).toHaveBeenCalledWith("1998-07-29", 1, "0.0.1");
   });
@@ -133,31 +99,23 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
     expect(confirmMetadataOnChainMock).not.toHaveBeenCalled();
   });
 
-  it("still builds the transfer transaction even if recording the on-chain confirmation itself fails - the real update already succeeded", async () => {
+  it("still reports success even if recording the on-chain confirmation itself fails - the real update already succeeded", async () => {
     confirmMetadataOnChainMock.mockResolvedValue({ success: false, reason: "ConditionalCheckFailedException" });
 
     const res = await call("0.0.1", "1998-07-29", "1");
     const body = await res.json();
 
     expect(body.data.serial).toBe(7);
-    expect(body.data.txBytes).toBeDefined();
   });
 
-  // See PUNCHLIST.md: this used to run post-transfer, where a failure here
-  // couldn't be told apart from "buyer never signed" once the wallet had
-  // already executed the transfer. Doing it pre-transfer means a failure
-  // here is still a pre-payment failure - release the claim, never build a
-  // transaction for the buyer to sign.
-  it("releases the claim and reports METADATA_PUBLISH_FAILED, without building a transaction, when the on-chain metadata update fails", async () => {
+  it("releases the claim and reports METADATA_PUBLISH_FAILED when the on-chain metadata update fails", async () => {
     submitNftMetadataUpdateMock.mockResolvedValue(false);
 
     const res = await call("0.0.1", "1998-07-29", "1");
     const body = await res.json();
 
     expect(body.data.serial).toBe(SerialErrorResponse.METADATA_PUBLISH_FAILED);
-    expect(body.data.txBytes).toBeUndefined();
     expect(releaseClaimMock).toHaveBeenCalledWith("0.0.1", "1998-07-29", 1, "SYSTEM_FAILURE");
-    expect(chainable.addHbarTransfer).not.toHaveBeenCalled();
   });
 
   it("releases the claim via releaseClaim when publishNftMetadata gets nothing published at all", async () => {
@@ -243,5 +201,29 @@ describe("/api/mint/[accountId]/[showDate]/[position] POST", () => {
 
     expect(body.ok).toBe(false);
     expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  // See mint-gate.test.ts for the full presale-cap matrix - this just
+  // confirms the route wires it in ahead of claimPerformance.
+  it("refuses a second concurrent presale lock instead of claiming", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false, launchedAt: undefined });
+    countLockedPerformancesMock.mockResolvedValue(1);
+
+    const res = await call("0.0.1", "1998-07-29", "1");
+    const body = await res.json();
+
+    expect(body.data.serial).toBe(SerialErrorResponse.TOO_MANY_LOCKED);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a presale account's first lock through to claimPerformance", async () => {
+    getAccountMock.mockResolvedValue({ whitelisted: true });
+    getAppConfigMock.mockResolvedValue({ mintEnabled: false, launchedAt: undefined });
+    countLockedPerformancesMock.mockResolvedValue(0);
+
+    await call("0.0.1", "1998-07-29", "1");
+
+    expect(claimPerformanceMock).toHaveBeenCalled();
   });
 });

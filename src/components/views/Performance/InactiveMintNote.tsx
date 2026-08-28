@@ -3,22 +3,21 @@ import { PageNote } from "@/components/common/PageNote";
 
 export type InactiveMintNoteProps = {
   collectionMintStatus?: CollectionMintStatus;
-  isPerformanceAvailable: boolean;
+  isAvailable: boolean;
   isBlocked: boolean;
-  isActive: boolean;
-  isPresale: boolean;
   isWhitelisted: boolean;
 };
 
 export const InactiveMintNote = ({
   collectionMintStatus,
-  isPerformanceAvailable,
+  isAvailable,
   isBlocked,
-  isActive,
-  isPresale,
   isWhitelisted,
 }: InactiveMintNoteProps): React.ReactNode => {
-  if (!collectionMintStatus || !isPerformanceAvailable || isBlocked || isActive) {
+  const isOpen = collectionMintStatus === CollectionMintStatus.OPEN;
+  const isPresale = collectionMintStatus === CollectionMintStatus.PRE_SALE;
+
+  if (!isAvailable || isBlocked || !collectionMintStatus || isOpen) {
     return null;
   }
 

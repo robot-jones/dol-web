@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import {
   extractBgColor,
   extractDonut,
@@ -14,22 +13,14 @@ import {
   getSetText,
 } from "@erikmuir/dol-lib/dapp";
 import {
-  CollectionMintStatus,
   DolColorHex,
-  MintStatusDisplayText,
   PerformanceAttributes,
-  PreTransferResponse,
-  SerialErrorResponse,
   SetlistLine,
   Subject,
-  Uint8ArrayWrapper,
 } from "@erikmuir/dol-lib/types";
-import { boldIndicator, msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
+import { boldIndicator, msToTime } from "@erikmuir/dol-lib/utils";
 import { Disclosure } from "@/components/common/Disclosure";
-import { DolButton } from "@/components/common/DolButton";
 import { Loading } from "@/components/common/Loading";
-import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
-import { Modal } from "@/components/globals/Modal";
 import {
   AuditLogsAttribute,
   DynamicAttributes,
@@ -40,16 +31,13 @@ import {
 import { HowMintingWorksNote } from "@/components/views/Performance/HowMintingWorksNote";
 import { ImageAttributesSection } from "@/components/views/Performance/ImageAttributesSection";
 import { InactiveMintNote } from "@/components/views/Performance/InactiveMintNote";
-import { LockedForNote } from "@/components/views/Performance/LockedForNote";
-import { CLAIM_PROGRESS_STEPS, CLAIM_PROGRESS_STEP_INTERVAL_MS } from "@/components/views/Performance/mintProgress";
-import { MintStatusText } from "@/components/views/Performance/MintStatusText";
+import { MintAction } from "@/components/views/Performance/MintAction";
 import { PerformanceAudioPlayer } from "@/components/views/Performance/PerformanceAudioPlayer";
 import { PerformanceHeading } from "@/components/views/Performance/PerformanceHeading";
 import { PerformanceImage } from "@/components/views/Performance/PerformanceImage";
 import {
   useAccountStatus,
   useAppConfigStatus,
-  useIsTokenAssociated,
   useNftMetadata,
   usePerformance,
   useSetlist,
@@ -58,21 +46,6 @@ import {
   useTrack,
   useWalletInterface,
 } from "@/hooks";
-import { fetchStandardJson } from "@/utils";
-import { openWalletConnectModal } from "@/wallet";
-
-// Narrower than PreTransferResponse (whose txBytes is optional) - by the
-// time we ever set preparedTx, serial/txBytes are always populated together.
-type PreparedTransfer = {
-  serial: number;
-  txBytes: Uint8ArrayWrapper;
-  lockedAt?: number;
-};
-
-// How long to wait for the wallet before showing the "check another
-// window" hint (Finding 51). Confirmed via live testing short enough to
-// avoid flicker on a normal approval.
-const WALLET_WAIT_HINT_DELAY_MS = 2000;
 
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
@@ -81,35 +54,14 @@ export const Performance = (): React.ReactNode => {
   const position = pathParts.at(-1) ?? "";
   const parsedPosition = parseInt(position, 10);
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
-  const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
 
   const [songId, setSongId] = useState<number>();
   const [bgColor, setBgColor] = useState<DolColorHex>(DolColorHex.Dark);
   const [donut, setDonut] = useState<DolColorHex | undefined>(DolColorHex.Red);
   const [subject, setSubject] = useState<Subject | undefined>(Subject.Lizard);
   const [attributes, setAttributes] = useState<PerformanceAttributes>({});
-  const [status, setStatus] = useState<MintStatusDisplayText>(MintStatusDisplayText.None);
-  const [associateError, setAssociateError] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [showImageAttributes, setShowImageAttributes] = useState(false);
-  // Gates the lock/generate/pin pipeline behind an explicit second click -
-  // clicking Mint alone only opens this, nothing backend-side happens until
-  // handleConfirmMint runs. Separate from the wallet's own approval prompt,
-  // which still comes later in performClaim/signAndFinalize.
-  const [showMintConfirm, setShowMintConfirm] = useState(false);
-  const [now, setNow] = useState<number>(Date.now());
-  // "Am I mid-flow" - set once claimed, cleared once signAndFinalize
-  // resolves (Finding 51: fires automatically, no second click).
-  const [preparedTx, setPreparedTx] = useState<PreparedTransfer | null>(null);
-  // Index into CLAIM_PROGRESS_STEPS.
-  const [claimProgressStep, setClaimProgressStep] = useState(0);
-  const [walletWaitTimedOut, setWalletWaitTimedOut] = useState(false);
-  const walletWaitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [releasingClaim, setReleasingClaim] = useState(false);
-  // Set if the user releases while purchaseNft is still pending in this
-  // tab - tells signAndFinalize's later continuation not to touch UI
-  // state the user's already moved past.
-  const releasedWhilePendingRef = useRef(false);
   // Which performance (date:position) the auto-randomize effect below has
   // already run for - keyed rather than a plain boolean since this
   // component stays mounted across in-app navigation between performances
@@ -122,21 +74,16 @@ export const Performance = (): React.ReactNode => {
   const { song, songLoading } = useSong(songId);
   const { track, trackLoading } = useTrack(date, parsedPosition);
   const { performance, performanceLoading, mutatePerformance } = usePerformance(date, parsedPosition);
-  const { metadata, metadataLoading } = useNftMetadata(hfbCollectionId, performance?.serial);
+  const { serial, lockedBy, lockedAt } = performance ?? {};
+  const { metadata, metadataLoading } = useNftMetadata(hfbCollectionId, serial);
   const { accountId, walletInterface } = useWalletInterface();
-  const { isAssociated, isAssociatedLoading, mutateIsAssociated } = useIsTokenAssociated(hfbCollectionId, accountId);
-  const { accountStatus, accountStatusLoading, mutateAccountStatus } = useAccountStatus(accountId);
-  const { appConfigStatus } = useAppConfigStatus();
+  const { accountStatus, accountStatusLoading } = useAccountStatus(accountId);
+  const { appConfigStatus, appConfigStatusLoading } = useAppConfigStatus();
 
+  const { collectionMintStatus } = appConfigStatus ?? {};
   const isWhitelisted = Boolean(accountStatus?.whitelisted);
   const isBlocked = Boolean(accountStatus?.blocked);
-  const collectionMintStatus = appConfigStatus?.collectionMintStatus;
-  const isMinted = Boolean(performance?.serial);
-  const isLocked = Boolean(performance?.lockedBy);
-  const isActive = collectionMintStatus === CollectionMintStatus.OPEN;
-  const isPresale = collectionMintStatus === CollectionMintStatus.PRE_SALE;
-  const isPerformanceAvailable = performance && !isMinted && !isLocked;
-  const isMintable = isPerformanceAvailable && !isBlocked && (isActive || (isPresale && isWhitelisted));
+  const isAvailable = Boolean(performance) && !serial && !lockedBy;
 
   // Set songId from setlist, which will in turn fetch the song
   useEffect(() => {
@@ -144,30 +91,6 @@ export const Performance = (): React.ReactNode => {
       setSongId(setlist.songId);
     }
   }, [setlist]);
-
-  // Ticks `now` while this performance is locked (by anyone, including a
-  // claim just made in this tab via preparedTx), so the elapsed-time note
-  // stays live without needing a network refetch - lockedAt is a fixed
-  // timestamp, only "now" needs to move.
-  useEffect(() => {
-    if (!performance?.lockedBy && !preparedTx) return;
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [performance?.lockedBy, preparedTx]);
-
-  // Advances CLAIM_PROGRESS_STEPS while claiming, resets otherwise.
-  useEffect(() => {
-    if (status !== MintStatusDisplayText.Claiming) {
-      setClaimProgressStep(0);
-      return;
-    }
-    const interval = setInterval(() => {
-      setClaimProgressStep((step) =>
-        Math.min(step + 1, CLAIM_PROGRESS_STEPS.length - 1)
-      );
-    }, CLAIM_PROGRESS_STEP_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [status]);
 
   // Update performance attributes when sources change
   useEffect(() => {
@@ -226,13 +149,6 @@ export const Performance = (): React.ReactNode => {
 
     setAttributes(newAttributes);
   }, [bgColor, donut, subject, track, setlist, setlists, song]);
-
-  // Set status to Already Minted if the performance has a serial
-  useEffect(() => {
-    if (performance && performance.serial) {
-      setStatus(MintStatusDisplayText.AlreadyMinted);
-    }
-  }, [performance]);
 
   // Set bgColor, donut, and subject from metadata
   useEffect(() => {
@@ -323,10 +239,10 @@ export const Performance = (): React.ReactNode => {
     const key = `${date}:${position}`;
     if (randomizedForRef.current === key) return;
     randomizedForRef.current = key;
-    if (!isMinted) {
+    if (!serial) {
       randomizeAttributes();
     }
-  }, [date, position, performance, performanceLoading, isMinted]);
+  }, [date, position, performance, performanceLoading, serial]);
 
   const handleRandomizeKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Now that ImageAttributes' randomize control has role="button"
@@ -342,389 +258,6 @@ export const Performance = (): React.ReactNode => {
     randomizeAttributes();
   }, []);
 
-  const handleConnectClick = async () => {
-    openWalletConnectModal();
-  };
-
-  const handleAssociateClick = async () => {
-    setAssociateError(false);
-    try {
-      const success = await walletInterface?.associateToken(hfbCollectionId);
-      if (success) {
-        mutateIsAssociated(true);
-      } else {
-        setAssociateError(true);
-      }
-    } catch {
-      setAssociateError(true);
-    }
-  };
-
-  // Self-service release (Finding 52) - safe even if purchaseNft is still
-  // pending in this tab, since releaseClaim itself verifies on-chain
-  // ownership before releasing anything. releasedWhilePendingRef tells
-  // signAndFinalize's later continuation not to touch UI state we're
-  // about to reset here. The abort route always responds success
-  // regardless of outcome, so the revalidation below is what surfaces the
-  // true result either way.
-  const handleReleaseClick = async () => {
-    if (!preparedTx && !performance?.lockedBy) return;
-
-    if (preparedTx) {
-      releasedWhilePendingRef.current = true;
-      setPreparedTx(null);
-      updateStatus(MintStatusDisplayText.None);
-    }
-
-    setReleasingClaim(true);
-    try {
-      await fetchStandardJson(
-        `/api/mint/${accountId}/${date}/${position}/0/abort`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "USER_CANCELLED" }),
-        }
-      );
-    } catch (err) {
-      console.error("Release request failed:", err);
-    } finally {
-      setReleasingClaim(false);
-      mutatePerformance();
-    }
-  };
-
-  const updateStatus = (newStatus: MintStatusDisplayText) => {
-    setStatus(newStatus);
-  };
-
-  // Mint pill click - only opens the confirm modal. Nothing backend-side
-  // (locking the performance/serial, generating the image, pinning to
-  // IPFS) happens until the user explicitly confirms - see PUNCHLIST.md.
-  const handleClaimClick = () => {
-    if (!pageLoaded || !setlist) {
-      return;
-    }
-    if (performance?.serial) {
-      updateStatus(MintStatusDisplayText.AlreadyMinted);
-      return;
-    }
-    setShowMintConfirm(true);
-  };
-
-  const handleCancelMintConfirm = () => setShowMintConfirm(false);
-
-  const handleConfirmMint = () => {
-    setShowMintConfirm(false);
-    performClaim();
-  };
-
-  // signAndFinalize fires automatically once this resolves (Finding 51) -
-  // no second click, even though this isn't technically a fresh user
-  // gesture either. getMintButton's "check another window" hint is the
-  // fallback for when the wallet doesn't grab focus on its own.
-  const performClaim = async () => {
-    updateStatus(MintStatusDisplayText.Claiming);
-
-    // Unhandled throw here used to leave the button disabled forever
-    // (Finding 31) - fetchStandardJson throws on any unmodeled error.
-    let response: PreTransferResponse;
-    try {
-      response = await fetchStandardJson<PreTransferResponse>(
-        `/api/mint/${accountId}/${date}/${position}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(attributes),
-        }
-      );
-    } catch (err) {
-      console.error("Claim request failed:", err);
-      updateStatus(MintStatusDisplayText.LockNotAcquired);
-      // Can't tell if a claim landed before the failure - release
-      // defensively (serial in the URL is unused by the abort route when
-      // there's nothing to release). Revalidate performance afterward so
-      // MintStatusIndicator doesn't keep showing a stale lockedBy.
-      try {
-        await fetchStandardJson(
-          `/api/mint/${accountId}/${date}/${position}/0/abort`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: "SYSTEM_FAILURE" }),
-          }
-        );
-      } catch (abortErr) {
-        console.error("Cleanup abort request failed:", abortErr);
-      }
-      mutatePerformance();
-      return;
-    }
-
-    const { serial, txBytes, lockedAt } = response;
-
-    if (!txBytes) {
-      // No client-side audit write here - whichever of these failed
-      // already has its own server-side audit entry.
-      switch (serial) {
-        case SerialErrorResponse.LOCK_NOT_ACQUIRED:
-          updateStatus(MintStatusDisplayText.LockNotAcquired);
-          break;
-        case SerialErrorResponse.ALREADY_MINTED:
-          updateStatus(MintStatusDisplayText.AlreadyMinted);
-          break;
-        case SerialErrorResponse.NO_SUPPLY:
-          updateStatus(MintStatusDisplayText.NoSupply);
-          break;
-        case SerialErrorResponse.TOO_MANY_LOCKED:
-          updateStatus(MintStatusDisplayText.TooManyLocked);
-          break;
-        case SerialErrorResponse.METADATA_PUBLISH_FAILED:
-          updateStatus(MintStatusDisplayText.MetadataPublishFailed);
-          break;
-        default:
-          updateStatus(MintStatusDisplayText.LockNotAcquired);
-          break;
-      }
-      await fetchStandardJson(
-        `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "SYSTEM_FAILURE" }),
-        }
-      );
-      mutatePerformance();
-      return;
-    }
-
-    setPreparedTx({ serial, txBytes, lockedAt });
-    // Revalidate now, the earliest point the client can honestly know the
-    // lock landed, rather than leaving MintStatusIndicator stale until
-    // signAndFinalize finishes.
-    mutatePerformance();
-    await signAndFinalize({ serial, txBytes, lockedAt });
-  };
-
-  // Formerly its own click handler (handleSignClick, "Confirm in
-  // Wallet") - now called automatically from handleClaimClick (Finding 51).
-  const signAndFinalize = async ({ serial, txBytes }: PreparedTransfer) => {
-    updateStatus(MintStatusDisplayText.InitiatingTransfer);
-    setWalletWaitTimedOut(false);
-    walletWaitTimeoutRef.current = setTimeout(
-      () => setWalletWaitTimedOut(true),
-      WALLET_WAIT_HINT_DELAY_MS
-    );
-
-    let transferSuccess = false;
-    try {
-      const nftId = new NftId(TokenId.fromString(hfbCollectionId), serial);
-      const tx = TransferTransaction.fromBytes(new Uint8Array(txBytes.data));
-      transferSuccess = await walletInterface!.purchaseNft(
-        tx,
-        nftId,
-        date,
-        parseInt(position)
-      );
-    } catch (err) {
-      console.error("Transaction error:", err);
-    } finally {
-      // The wait is over either way (resolved, however it resolved) - stop
-      // the hint timer and hide the hint if it had already fired.
-      if (walletWaitTimeoutRef.current) {
-        clearTimeout(walletWaitTimeoutRef.current);
-        walletWaitTimeoutRef.current = null;
-      }
-      setWalletWaitTimedOut(false);
-    }
-
-    // User already released this claim while we were waiting - don't
-    // overwrite UI state they've already moved past.
-    if (releasedWhilePendingRef.current) {
-      releasedWhilePendingRef.current = false;
-      if (transferSuccess) {
-        // Rare race: transfer succeeded moments after release. Not shown
-        // to the user - just a best-effort finalize attempt (the
-        // post-transfer route's own claim-match check decides if it's
-        // safe); if it can't land, the orphaned NFT is manual-reconciliation
-        // territory, same as a tab closing mid-flow.
-        console.warn("Wallet transfer succeeded after the claim was already released.", { date, position, serial });
-        fetchStandardJson<boolean>(
-          `/api/mint/${accountId}/${date}/${position}/${serial}`,
-          { method: "POST" }
-        ).catch((err) => console.error("Best-effort finalize after late release failed:", err));
-      }
-      return;
-    }
-
-    if (!transferSuccess) {
-      updateStatus(MintStatusDisplayText.TransferAborted);
-      setPreparedTx(null);
-      // Best-effort - UI's already reset above, so a failure here just
-      // falls back to the 15-minute sweep instead of stranding anything.
-      try {
-        await fetchStandardJson(
-          `/api/mint/${accountId}/${date}/${position}/${serial}/abort`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: "WALLET_REJECTED" }),
-          }
-        );
-      } catch (err) {
-        console.error("Cleanup abort request failed:", err);
-      }
-      mutatePerformance();
-      return;
-    }
-
-    updateStatus(MintStatusDisplayText.UpdatingMetadata);
-    // Same missing-try/catch risk as the claim fetch (Finding 31), worse
-    // here since the wallet's already signed and paid.
-    let metadataUpdateSuccess = false;
-    try {
-      metadataUpdateSuccess = await fetchStandardJson<boolean>(
-        `/api/mint/${accountId}/${date}/${position}/${serial}`,
-        { method: "POST" }
-      );
-    } catch (err) {
-      console.error("Metadata update request failed:", err);
-    }
-
-    setPreparedTx(null);
-    // performance (SWR) doesn't update on its own just because preparedTx
-    // did - without this, MintStatusIndicator stayed stuck on stale data.
-    mutatePerformance();
-    if (metadataUpdateSuccess) {
-      // A finalized mint is also when the server consumes a whitelisted
-      // account's early access (mint-gate.ts, consumeEarlyMintWhitelist) -
-      // revalidate here so a still-presale second attempt in this tab sees
-      // the real (no longer whitelisted) state instead of a stale cached one.
-      mutateAccountStatus();
-    }
-    updateStatus(
-      metadataUpdateSuccess
-        ? MintStatusDisplayText.MintComplete
-        : MintStatusDisplayText.FailedToUpdateMetadata
-    );
-  };
-
-  // Single source of truth for both the pill's color/label (replacing
-  // MintStatusBanner) and whether it's actually clickable (replacing
-  // getMintButton) - same branch order/conditions the old getMintButton
-  // used, so behavior is unchanged, just no longer split across two
-  // independent state machines. `extra` is secondary UI (Release button,
-  // "locked for" note, associate error) that doesn't fit inside a single
-  // pill and renders below it, same as before.
-  type MintAction = {
-    color: MintActionColor;
-    label: string;
-    onClick?: () => void;
-    extra?: React.ReactNode;
-  };
-
-  const getMintAction = (): MintAction => {
-    if (performanceLoading || isAssociatedLoading || accountStatusLoading) {
-      return { color: "gray", label: "Checking availability…" };
-    }
-    if (!accountId) {
-      return { color: "blue", label: "Connect Your Wallet", onClick: handleConnectClick };
-    }
-    if (!isAssociated) {
-      return {
-        color: "blue",
-        label: "Associate The Token",
-        onClick: handleAssociateClick,
-        extra: associateError ? (
-          <div className="text-xs text-dol-red text-center">
-            Failed to associate token. Please try again.
-          </div>
-        ) : null,
-      };
-    }
-    // Covers the gap between clicking Mint and preparedTx landing - the
-    // old `disabled` list special-cased Claiming for the same reason (no
-    // double-submit while the pre-transfer request is in flight).
-    if (status === MintStatusDisplayText.Claiming) {
-      return { color: "blue", label: "Claiming…" };
-    }
-    if (preparedTx) {
-      // Gated on walletWaitTimedOut so a normal-speed approval never sees
-      // it, and it naturally excludes UpdatingMetadata (that flag's
-      // already reset by then) - by then the transfer's a known success,
-      // nothing left to release.
-      const canRelease = walletWaitTimedOut;
-      return {
-        color: "blue",
-        label: status === MintStatusDisplayText.UpdatingMetadata
-          ? "Updating Metadata…"
-          : "Waiting For Your Wallet…",
-        extra: (
-          <div className="flex flex-col items-center gap-2">
-            {canRelease && (
-              <>
-                <div className="text-xs text-gray-medium text-center max-w-[280px]">
-                  Still waiting on your wallet - it may have opened in another window or tab. Check for it there.
-                </div>
-                <DolButton
-                  size="sm"
-                  color="red"
-                  outline
-                  roundedFull
-                  onClick={handleReleaseClick}
-                  disabled={releasingClaim}
-                >
-                  {releasingClaim ? "Releasing..." : "Release"}
-                </DolButton>
-              </>
-            )}
-            <LockedForNote lockedAt={preparedTx.lockedAt} now={now} />
-          </div>
-        ),
-      };
-    }
-    if (performance?.serial) {
-      return { color: "red", label: `Already in Someone's Stash · #${performance.serial}` };
-    }
-    if (performance?.lockedBy) {
-      // Only for your own lock - releasing someone else's is still
-      // admin-script territory.
-      const isOwnLock = performance.lockedBy === accountId;
-      return {
-        color: "yellow",
-        label: "Someone's Claiming This",
-        extra: (
-          <div className="flex flex-col items-center gap-2">
-            {isOwnLock && (
-              <DolButton
-                size="sm"
-                color="red"
-                outline
-                roundedFull
-                onClick={handleReleaseClick}
-                disabled={releasingClaim}
-              >
-                {releasingClaim ? "Releasing..." : "Release"}
-              </DolButton>
-            )}
-            <LockedForNote lockedAt={performance.lockedAt} now={now} />
-          </div>
-        ),
-      };
-    }
-    if (isBlocked) {
-      return { color: "gray", label: "Minting Unavailable" };
-    }
-    if (!isMintable) {
-      return { color: "gray", label: "Public Mint: 9/4" };
-    }
-    return {
-      color: "green",
-      label: `Mint: ${hbarPrice} ℏ`,
-      onClick: handleClaimClick,
-    };
-  };
-
   if (setlistLoading) {
     return <Loading sizeInPixels={90} showLyric />;
   }
@@ -737,13 +270,11 @@ export const Performance = (): React.ReactNode => {
     ? getPositionInSet(setlists, setlist.set, setlist.position)
     : undefined;
 
-  const mintAction = getMintAction();
-
   const imageAttributesProps = {
     bgColor,
     donut,
     subject,
-    minted: isMinted,
+    minted: Boolean(serial),
     handleBgColorChanged,
     handleDonutChanged,
     handleSubjectChanged,
@@ -756,10 +287,8 @@ export const Performance = (): React.ReactNode => {
       <div className="flex flex-col items-center gap-4 w-full">
         <InactiveMintNote
           collectionMintStatus={collectionMintStatus}
-          isPerformanceAvailable={Boolean(isPerformanceAvailable)}
+          isAvailable={isAvailable}
           isBlocked={isBlocked}
-          isActive={isActive}
-          isPresale={isPresale}
           isWhitelisted={isWhitelisted}
         />
         <PerformanceHeading
@@ -784,25 +313,33 @@ export const Performance = (): React.ReactNode => {
             className="absolute -top-4 -left-4 z-[5]"
           />
         </div>
-        <MintActionPill
-          color={mintAction.color}
-          label={mintAction.label}
-          onClick={mintAction.onClick}
-        />
-        {mintAction.extra}
-        <MintStatusText
+        <MintAction
+          showDate={date}
+          position={parsedPosition}
           performanceLoading={performanceLoading}
-          status={status}
-          claimProgressStep={claimProgressStep}
+          serial={serial}
+          lockedBy={lockedBy}
+          lockedAt={lockedAt}
+          mutatePerformance={mutatePerformance}
+          attributes={attributes}
+          pageLoaded={pageLoaded}
+          hasSetlist={Boolean(setlist)}
+          accountId={accountId}
+          walletInterface={walletInterface}
+          accountStatusLoading={accountStatusLoading}
+          isBlocked={isBlocked}
+          isWhitelisted={isWhitelisted}
+          appConfigStatusLoading={appConfigStatusLoading}
+          collectionMintStatus={collectionMintStatus}
         />
       </div>
 
-      <HowMintingWorksNote isMintable={Boolean(isMintable)} />
+      <HowMintingWorksNote show={isAvailable} />
 
-      <ImageAttributesSection show={showImageAttributes && !isMinted} {...imageAttributesProps} />
+      <ImageAttributesSection show={showImageAttributes && !serial} {...imageAttributesProps} />
 
       <Disclosure summary="Details">
-        <ImageAttributesSection show={showImageAttributes && isMinted} {...imageAttributesProps} />
+        <ImageAttributesSection show={showImageAttributes && Boolean(serial)} {...imageAttributesProps} />
 
         <SectionHeader text="Fixed NFT Attributes" />
         <FixedAttributes
@@ -830,28 +367,6 @@ export const Performance = (): React.ReactNode => {
         <SectionHeader text="Audit Logs" />
         <AuditLogsAttribute setlist={setlist} setlistLoading={setlistLoading} />
       </Disclosure>
-
-      <Modal
-        id="mint-confirm"
-        show={showMintConfirm}
-        onClose={handleCancelMintConfirm}
-        title="Confirm Mint"
-        dim
-      >
-        <div className="flex flex-col gap-4 w-64 text-center">
-          <div className="text-balance">
-            You&apos;re about to mint <strong>{attributes.song}</strong>
-            {attributes.date && <> from {toFriendlyDate(attributes.date)}</>} for {hbarPrice} ℏ.
-          </div>
-          <div className="text-xs text-gray-medium">
-            We&apos;ll lock this spot and generate your NFT, then ask you to approve payment in your wallet.
-          </div>
-          <div className="flex flex-col gap-3">
-            <DolButton color="green" fullWidth onClick={handleConfirmMint}>Confirm</DolButton>
-            <DolButton color="gray" outline fullWidth onClick={handleCancelMintConfirm}>Cancel</DolButton>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

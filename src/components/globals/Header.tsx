@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { twMerge } from "tailwind-merge";
-import { DiscordLink } from "../common/DiscordLink";
 import { Shapes } from "../common/Shapes";
+import { Bag } from "./Bag";
 import { Nav } from "./Nav";
 import { Wallet } from "./Wallet";
 
@@ -33,23 +33,23 @@ export const Header = () => {
     <header
       ref={headerRef}
       className={twMerge(
-        "fixed top-0 w-full bg-gray-extra-dark",
+        "fixed top-0 w-full bg-gray-extra-dark p-2 pb-6",
         "border-b border-gray-dark-2 shadow-lg",
         "z-10",
       )}
     >
-      <div className="header-grid items-start gap-x-2 p-2 pb-4">
+      <div className="header-grid items-start gap-x-2">
         <div
-          className="[grid-area:logo] flex items-center gap-2 cursor-default"
+          className="[grid-area:logo] flex items-center gap-2 cursor-default pt-1"
           title="Can you still have fun?"
         >
           <a href="https://wilson.com" target="_blank" rel="noopener noreferrer">
             <Shapes sizeInPixels={20} bounceOnHover />
           </a>
         </div>
-        <div className="[grid-area:nav] px-2 pt-2 pb-8 min-[900px]:py-2"><Nav /></div>
-        <div className="[grid-area:actions] pr-2 flex items-center justify-end gap-2">
-          <DiscordLink sizeInPixels={24} />
+        <div className="[grid-area:nav] pt-1"><Nav /></div>
+        <div className="[grid-area:actions] flex items-center justify-end gap-1">
+          <Bag />
           <Wallet />
         </div>
       </div>

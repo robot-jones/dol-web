@@ -81,7 +81,7 @@ export const StashItem = ({
     const textColorClass = getTwDolColor(eraColor, TwColorClassPrefix.Text);
 
     return (
-      <div className="flex items-start p-2 gap-2">
+      <div className="flex p-2 gap-2 items-center">
         <Image
           src={ipfsToHttps(metadata.image, process.env.NEXT_PUBLIC_PINATA_GATEWAY)}
           alt={metadata.name}

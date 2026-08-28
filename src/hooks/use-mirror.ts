@@ -3,7 +3,15 @@
 import useSWR from "swr";
 import { NftMetadata, MirrorNft } from "@erikmuir/dol-lib/types";
 import { fetchStandardJson } from "@/utils";
-import { sortBySerialAscending } from "@erikmuir/dol-lib/dapp";
+
+// Not sortBySerialAscending (dol-lib) - serials are handed out from
+// whatever's available at claim time, not assigned in mint order (that's
+// deliberate, to minimize claim-time races - see the mint pipeline), so
+// serial order doesn't reflect mint order. created_timestamp is the
+// mirror node's own record of when each NFT was actually minted, already
+// present on every MirrorNft with no extra fetch needed.
+const sortByCreatedTimestampDescending = (a: MirrorNft, b: MirrorNft): number =>
+  Number(b.created_timestamp) - Number(a.created_timestamp);
 
 export function useIsTokenAssociated(
   tokenId: string,
@@ -30,7 +38,7 @@ export function useAccountNfts(tokenId: string, accountId: string | null) {
     fetchStandardJson
   );
   return {
-    nfts: data?.sort(sortBySerialAscending),
+    nfts: data?.sort(sortByCreatedTimestampDescending),
     nftsLoading: isLoading,
     nftsError: error,
   };
