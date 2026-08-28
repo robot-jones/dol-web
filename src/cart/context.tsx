@@ -38,6 +38,14 @@ export type CartContextValue = {
   clearLastError: () => void;
   removeItem: (showDate: string, position: number) => void;
   clear: () => void;
+  // Drops a "ready" item that a background re-check (CartValidator) found
+  // is no longer actually locked by this account - e.g. reconcile-claims-
+  // sweep released it server-side while this tab sat open. Distinct from
+  // failPendingItem: that one only ever removes a still-*pending* item
+  // (an add that never finished); this one only removes an already-*ready*
+  // one (an add that finished, then later stopped being true). Also
+  // records why via lastError, same as failPendingItem.
+  expireReadyItem: (showDate: string, position: number, song: string) => void;
   // Lets something outside the Bag (Add to Bag on a performance page) ask
   // it to open itself - a counter, not a boolean, since Bag.tsx already
   // owns its own open/closed state (and all the reasons it closes itself -
@@ -58,6 +66,7 @@ const defaultContext: CartContextValue = {
   clearLastError: () => {},
   removeItem: () => {},
   clear: () => {},
+  expireReadyItem: () => {},
   bagOpenRequestCount: 0,
   requestBagOpen: () => {},
 };
@@ -165,6 +174,15 @@ export const CartContextProvider = (props: {
 
   const clear = () => setItems([]);
 
+  const expireReadyItem = (showDate: string, position: number, song: string) => {
+    setItems((prev) => {
+      const index = findIndex(prev, showDate, position);
+      if (index === -1 || prev[index].status !== "ready") return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+    setLastError(`${song} was removed from your bag - it's no longer reserved for you.`);
+  };
+
   const requestBagOpen = () => setBagOpenRequestCount((prev) => prev + 1);
 
   return (
@@ -178,6 +196,7 @@ export const CartContextProvider = (props: {
         clearLastError,
         removeItem,
         clear,
+        expireReadyItem,
         bagOpenRequestCount,
         requestBagOpen,
       }}
