@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { CartContextProvider, CartItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
 import { fetchStandardJson } from "@/utils";
@@ -500,6 +500,51 @@ describe("Bag", () => {
       expect(screen.getByText("Connect your wallet to check out.")).toBeInTheDocument();
       expect(fetchStandardJson).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
+    });
+
+    // Bug fixed 2026-08-28: the confirm modal's Confirm button had no
+    // debounce/disabled guard, so a fast double-click could fire
+    // startCheckout() twice concurrently - two checkout requests, two
+    // signed transfer transactions, two wallet prompts for the same
+    // items. checkoutInFlightRef guards this synchronously, independent
+    // of any state/render timing - proven here by invoking the same
+    // handler twice before the in-flight checkout call ever resolves.
+    it("only starts one checkout when Confirm is invoked twice before the request resolves", async () => {
+      let resolveCheckout: (value: unknown) => void = () => {};
+      vi.mocked(fetchStandardJson).mockImplementation(
+        (url: unknown) =>
+          new Promise((resolve) => {
+            if (`${url}`.endsWith("/checkout")) {
+              resolveCheckout = resolve;
+            } else {
+              resolve(true); // finalize calls, once checkout eventually resolves
+            }
+          })
+      );
+
+      render(<Seeded items={[item1]} />);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+      fireEvent.click(screen.getByRole("button", { name: "Checkout" }));
+      const confirmBtn = screen.getByRole("button", { name: "Confirm" });
+      // Both dispatched inside one act() call, not two separate
+      // fireEvent.click() statements - RTL flushes React's queued state
+      // updates (checkingOut -> disabled) between separate statements,
+      // which would mask whether the ref itself is doing anything by
+      // relying on the disabled attribute alone. Batching both inside one
+      // act() call reproduces the real race: two clicks landing before
+      // React has committed anything from the first.
+      act(() => {
+        fireEvent.click(confirmBtn);
+        fireEvent.click(confirmBtn);
+      });
+
+      const checkoutCalls = vi.mocked(fetchStandardJson).mock.calls.filter(([url]) => `${url}`.endsWith("/checkout"));
+      expect(checkoutCalls).toHaveLength(1);
+
+      resolveCheckout({ txBytes: rawTxBytes, confirmed: [{ showDate: item1.showDate, position: item1.position }], expired: [] });
+      purchaseNfts.mockResolvedValue(true);
+      await waitFor(() => expect(screen.getByText("Your bag is empty.")).toBeInTheDocument());
+      expect(purchaseNfts).toHaveBeenCalledTimes(1);
     });
 
     it("shows an error notice if the checkout request itself fails", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
@@ -31,6 +31,13 @@ export const Bag = () => {
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Synchronous guard against a double-click on the confirm modal's
+  // Confirm button starting checkout twice - `checkingOut` alone doesn't
+  // catch this, since its own setState hasn't necessarily been applied yet
+  // by the time a second, near-simultaneous click is processed. This ref
+  // is checked and set inline, before any state update or await, so a
+  // second synchronous invocation in the same tick sees it immediately.
+  const checkoutInFlightRef = useRef(false);
 
   const readyItems = items.filter((i): i is ReadyCartItem => i.status === "ready");
   const hasPending = items.some((i) => i.status === "pending");
@@ -126,8 +133,12 @@ export const Bag = () => {
   };
 
   const startCheckout = async () => {
+    if (checkoutInFlightRef.current) return;
+    checkoutInFlightRef.current = true;
+
     if (!accountId || !walletInterface) {
       setNotice("Connect your wallet to check out.");
+      checkoutInFlightRef.current = false;
       return;
     }
 
@@ -219,6 +230,7 @@ export const Bag = () => {
       setNotice("Something went wrong starting checkout. Please try again.");
     } finally {
       setCheckingOut(false);
+      checkoutInFlightRef.current = false;
     }
   };
 
@@ -341,7 +353,7 @@ export const Bag = () => {
             We&apos;ll ask you to approve payment in your wallet, then finalize your NFTs.
           </div>
           <div className="flex flex-col gap-3">
-            <DolButton color="green" fullWidth onClick={handleCheckoutConfirm}>Confirm</DolButton>
+            <DolButton color="green" fullWidth disabled={checkingOut} onClick={handleCheckoutConfirm}>Confirm</DolButton>
             <DolButton color="gray" outline fullWidth onClick={handleCheckoutConfirmCancel}>Cancel</DolButton>
           </div>
         </div>
