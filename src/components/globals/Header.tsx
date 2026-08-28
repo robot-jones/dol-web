@@ -33,7 +33,7 @@ export const Header = () => {
     <header
       ref={headerRef}
       className={twMerge(
-        "fixed top-0 w-full bg-gray-extra-dark p-2 pb-8",
+        "fixed top-0 w-full bg-gray-extra-dark p-2 pb-6",
         "border-b border-gray-dark-2 shadow-lg",
         "z-10",
       )}

@@ -45,7 +45,7 @@ export default function YourStash(): React.ReactElement {
   };
 
   return (
-    <div className="w-full md:w-[500px] lg:w-[680px] mx-auto">
+    <div className="w-full md:w-[500px] lg:w-[680px] mx-auto px-4 md:px-0">
       {getContent()}
     </div>
   );
