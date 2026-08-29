@@ -1,6 +1,7 @@
 import React from "react";
 import { Suspense } from "react";
 import { twMerge } from "tailwind-merge";
+import { Analytics } from "@vercel/analytics/next";
 import { Footer } from "@/components/globals/Footer";
 import { Header } from "@/components/globals/Header";
 import { jost } from "@/styles/fonts";
@@ -69,6 +70,7 @@ export default async function RootLayout({
             </WalletConnectContextProvider>
           </Suspense>
         </React.StrictMode>
+        <Analytics />
       </body>
     </html>
   );
