@@ -4,7 +4,7 @@ export const Footer = () => {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="shrink-0 mt-8 border-t border-gray-dark-2">
+    <footer className="shrink-0 mt-8 border-t border-gray-dark-2 bg-gray-extra-dark">
       <div className="flex flex-col items-center gap-2 px-2 py-6">
         <div className="flex items-center justify-center gap-2 text-sm">
           <span>built on Hedera</span>
