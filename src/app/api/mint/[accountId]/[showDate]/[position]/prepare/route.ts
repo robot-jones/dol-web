@@ -25,6 +25,13 @@ export type PrepareParams = {
   position: string;
 };
 
+// The authoritative limit - CustomizableAttributes.tsx's own MAX_INSCRIPTION_LENGTH
+// is just the client-side mirror (same reasoning as checkout/route.ts's
+// MAX_CHECKOUT_ITEMS vs. cart/context.tsx's MAX_CART_ITEMS). Checked here
+// because this route accepts a raw PerformanceAttributes body with no
+// validation otherwise - a client-side maxLength doesn't stop a direct POST.
+const MAX_INSCRIPTION_LENGTH = 100;
+
 export type ServerPrepareResponse = {
   serial: number | SerialErrorResponse;
   lockedAt?: number;
@@ -52,6 +59,15 @@ export async function POST(
   const attributes: PerformanceAttributes = await req.json();
   if (!attributes) {
     return badRequest("No attributes provided");
+  }
+  if (attributes.inscription !== undefined) {
+    if (typeof attributes.inscription !== "string") {
+      return badRequest("Malformed inscription");
+    }
+    attributes.inscription = attributes.inscription.trim() || undefined;
+    if (attributes.inscription && attributes.inscription.length > MAX_INSCRIPTION_LENGTH) {
+      return badRequest(`Inscription cannot exceed ${MAX_INSCRIPTION_LENGTH} characters`);
+    }
   }
 
   const serial = await claimPerformance(
@@ -101,7 +117,9 @@ export async function POST(
     metadataCid,
     showDate,
     parsedPosition,
-    accountId
+    accountId,
+    undefined,
+    attributes.inscription
   );
   if (!metadataUpdateSuccess) {
     console.error("Failed to submit on-chain metadata update.");

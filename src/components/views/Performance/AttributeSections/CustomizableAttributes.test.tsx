@@ -1,18 +1,19 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { DolColorHex, Subject } from "@erikmuir/dol-lib/types";
-import { ImageAttributes } from "./ImageAttributes";
+import { CustomizableAttributes } from "./CustomizableAttributes";
 
 const baseProps = {
   bgColor: DolColorHex.Blue,
   handleBgColorChanged: vi.fn(),
   handleDonutChanged: vi.fn(),
   handleSubjectChanged: vi.fn(),
+  handleInscriptionChanged: vi.fn(),
 };
 
-describe("ImageAttributes randomize control (Finding 39)", () => {
+describe("CustomizableAttributes randomize control (Finding 39)", () => {
   it("is announced as a real button, not just a tooltip title", () => {
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         handleRandomizeClick={vi.fn()}
         handleRandomizeKeyDown={vi.fn()}
@@ -24,7 +25,7 @@ describe("ImageAttributes randomize control (Finding 39)", () => {
 
   it("is not rendered once minted", () => {
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         minted
         handleRandomizeClick={vi.fn()}
@@ -37,7 +38,7 @@ describe("ImageAttributes randomize control (Finding 39)", () => {
   it("fires onClick", () => {
     const handleRandomizeClick = vi.fn();
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         handleRandomizeClick={handleRandomizeClick}
         handleRandomizeKeyDown={vi.fn()}
@@ -50,7 +51,7 @@ describe("ImageAttributes randomize control (Finding 39)", () => {
   it("wires keydown through for keyboard activation", () => {
     const handleRandomizeKeyDown = vi.fn();
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         handleRandomizeClick={vi.fn()}
         handleRandomizeKeyDown={handleRandomizeKeyDown}
@@ -61,10 +62,10 @@ describe("ImageAttributes randomize control (Finding 39)", () => {
   });
 });
 
-describe("ImageAttributes once minted", () => {
+describe("CustomizableAttributes once minted", () => {
   it("shows read-only values instead of pickers - permanent on-chain facts, not a disabled form", () => {
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         minted
         donut={DolColorHex.Red}
@@ -81,7 +82,7 @@ describe("ImageAttributes once minted", () => {
 
   it("falls back to the shared --null-- treatment when there's no donut", () => {
     render(
-      <ImageAttributes
+      <CustomizableAttributes
         {...baseProps}
         minted
         subject={Subject.Lizard}
@@ -90,5 +91,61 @@ describe("ImageAttributes once minted", () => {
       />
     );
     expect(screen.getByText("--null--")).toBeInTheDocument();
+  });
+
+  it("shows the inscription when one was set", () => {
+    render(
+      <CustomizableAttributes
+        {...baseProps}
+        minted
+        inscription="for jenny"
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    expect(screen.getByText("for jenny")).toBeInTheDocument();
+  });
+
+  it("omits the inscription tile entirely when none was set - not another --null--", () => {
+    render(
+      <CustomizableAttributes
+        {...baseProps}
+        minted
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    expect(screen.queryByText("Inscription")).not.toBeInTheDocument();
+  });
+});
+
+describe("CustomizableAttributes inscription input", () => {
+  it("reflects the current value and reports edits", () => {
+    const handleInscriptionChanged = vi.fn();
+    render(
+      <CustomizableAttributes
+        {...baseProps}
+        inscription="hello"
+        handleInscriptionChanged={handleInscriptionChanged}
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    const input = screen.getByLabelText("Inscription (optional)") as HTMLInputElement;
+    expect(input.value).toBe("hello");
+    fireEvent.change(input, { target: { value: "hello there" } });
+    expect(handleInscriptionChanged).toHaveBeenCalledWith("hello there");
+  });
+
+  it("caps input length at MAX_INSCRIPTION_LENGTH via maxLength", () => {
+    render(
+      <CustomizableAttributes
+        {...baseProps}
+        handleRandomizeClick={vi.fn()}
+        handleRandomizeKeyDown={vi.fn()}
+      />
+    );
+    const input = screen.getByLabelText("Inscription (optional)") as HTMLInputElement;
+    expect(input.maxLength).toBe(100);
   });
 });

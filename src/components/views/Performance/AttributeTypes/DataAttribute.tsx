@@ -9,6 +9,11 @@ import { BaseAttributeProps } from "./types";
 export type DataAttributeProps = BaseAttributeProps & {
   data?: string | number;
   href?: string;
+  // Every existing caller wants the default nowrap-and-truncate-the-tile
+  // behavior (dates, positions, short labels) - this is an opt-in escape
+  // hatch for the rare attribute (inscription) that's sentence-length and
+  // should wrap onto multiple lines instead of forcing the tile wide.
+  wrap?: boolean;
 };
 
 export const DataAttribute = ({
@@ -19,6 +24,7 @@ export const DataAttribute = ({
   textColor = "light",
   attributeColor,
   fullWidth,
+  wrap,
 }: DataAttributeProps): React.ReactNode => {
   const getContent = () => {
     if (loading) {
@@ -53,7 +59,8 @@ export const DataAttribute = ({
   return (
     <div
       className={twMerge(
-        "border rounded p-2 whitespace-nowrap text-center self-stretch",
+        "border rounded p-2 text-center self-stretch",
+        wrap ? "whitespace-normal break-words" : "whitespace-nowrap",
         fullWidth ? "w-full" : "w-fit",
         attributeColor ? getTwDolColor(attributeColor, TwColorClassPrefix.Border) : "border-gray-medium",
         attributeColor ? getTwDolColor(attributeColor, TwColorClassPrefix.Background, 25) : "bg-gray-dark/75",

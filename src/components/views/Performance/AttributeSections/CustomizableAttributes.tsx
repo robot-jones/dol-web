@@ -2,12 +2,23 @@ import Image from "next/image";
 import { MdAutorenew } from "react-icons/md";
 import { twMerge } from "tailwind-merge";
 import { DolColorHex, Subject } from "@erikmuir/dol-lib/types";
-import { getDolColorDisplayName, getDolColorFromHexValue } from "@erikmuir/dol-lib/dapp";
+import {
+  getDolColorDisplayName,
+  getDolColorFromHexValue,
+  getLabelTextColorClass,
+} from "@erikmuir/dol-lib/dapp";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 import {
   AttributePickerShell,
   PickerOption,
 } from "../AttributeTypes/AttributePickerShell";
 import { DataAttribute } from "../AttributeTypes/DataAttribute";
+
+// "On the permanent record" - kept short and epitaph-length on purpose,
+// not a comment box. Server-side authority is prepare/route.ts's own
+// MAX_INSCRIPTION_LENGTH; this is the client-side mirror (same reasoning
+// as MAX_CART_ITEMS/MAX_CHECKOUT_ITEMS).
+export const MAX_INSCRIPTION_LENGTH = 100;
 
 const getDolColorOptions = (): PickerOption<DolColorHex>[] => [
   { label: "Blue", value: DolColorHex.Blue },
@@ -144,29 +155,33 @@ const renderSubjectOption = (
   );
 };
 
-export type ImageAttributesProps = {
+export type CustomizableAttributesProps = {
   bgColor: DolColorHex;
   donut?: DolColorHex;
   subject?: Subject;
+  inscription?: string;
   minted?: boolean;
   handleBgColorChanged: (bgColor?: string) => void;
   handleDonutChanged: (donut?: string) => void;
   handleSubjectChanged: (subject?: string) => void;
+  handleInscriptionChanged: (inscription: string) => void;
   handleRandomizeClick: (event: React.MouseEvent) => void;
   handleRandomizeKeyDown: (event: React.KeyboardEvent) => void;
 };
 
-export const ImageAttributes = ({
+export const CustomizableAttributes = ({
   bgColor,
   donut,
   subject,
+  inscription,
   minted,
   handleBgColorChanged,
   handleDonutChanged,
   handleSubjectChanged,
+  handleInscriptionChanged,
   handleRandomizeClick,
   handleRandomizeKeyDown,
-}: ImageAttributesProps): React.ReactNode => {
+}: CustomizableAttributesProps): React.ReactNode => {
   // Once minted these are permanent on-chain facts, not a form - a
   // disabled picker still looks like a dropdown that could open, which is
   // actively misleading for a value that never will again. Match the same
@@ -187,63 +202,100 @@ export const ImageAttributes = ({
           attributeColor={"yellow"}
         />
         <DataAttribute label="Subject" data={subjectLabel} attributeColor={"yellow"} />
+        {inscription && (
+          <DataAttribute
+            label="Inscription"
+            data={inscription}
+            attributeColor={"yellow"}
+            fullWidth
+            wrap
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col lg:flex-row justify-center gap-2 items-center w-full max-w-[640px] mx-auto">
-      <AttributePickerShell
-        id="background-attribute"
-        label="Background"
-        currentValue={bgColor}
-        options={getDolColorOptions()}
-        onChange={handleBgColorChanged}
-        attributeColor={"yellow"}
-        renderOption={renderBackgroundOption}
-      />
-      <AttributePickerShell
-        id="donut-attribute"
-        label="Donut"
-        currentValue={donut}
-        options={[{ label: "None", value: undefined }, ...getDolColorOptions()]}
-        onChange={handleDonutChanged}
-        attributeColor={"yellow"}
-        renderOption={renderDonutOption}
-      />
-      <AttributePickerShell
-        id="subject-attribute"
-        label="Subject"
-        currentValue={subject}
-        options={[{ label: "None", value: undefined }, ...getSubjectOptions()]}
-        onChange={handleSubjectChanged}
-        attributeColor={"yellow"}
-        renderOption={renderSubjectOption}
-      />
-      {
-        // Each AttributePickerShell is a label sitting above its trigger
-        // button, so the outer row's items-center centers this against
-        // the *label+button* pair, not the button alone - the icon reads
-        // as vertically off from the pickers themselves. Fixed by mirroring
-        // that same two-part shape here: an invisible label-height spacer
-        // (real label markup/classes, not a guessed number, so it tracks
-        // automatically if the label style ever changes) sits above a box
-        // matched to the trigger's own rendered height (measured: 30px),
-        // with the icon centered inside that box - not the icon itself.
-      }
-      <div className="flex flex-col items-center mt-2 lg:mt-0 lg:ml-2">
-        <span aria-hidden className="invisible block text-[10px] uppercase pb-1">&nbsp;</span>
-        <div className="h-[30px] flex items-center">
-          <MdAutorenew
-            size={40}
-            className={twMerge("p-[6px] shadow-md rounded-full cursor-pointer", "animate-color-cycle")}
-            title="Randomize"
-            role="button"
-            aria-label="Randomize"
-            onClick={handleRandomizeClick}
-            onKeyDown={handleRandomizeKeyDown}
-            tabIndex={0}
-          />
+    <div className="flex flex-col gap-3 w-full max-w-[640px] mx-auto">
+      <div className="flex flex-col lg:flex-row justify-center gap-2 items-center">
+        <AttributePickerShell
+          id="background-attribute"
+          label="Background"
+          currentValue={bgColor}
+          options={getDolColorOptions()}
+          onChange={handleBgColorChanged}
+          attributeColor={"yellow"}
+          renderOption={renderBackgroundOption}
+        />
+        <AttributePickerShell
+          id="donut-attribute"
+          label="Donut"
+          currentValue={donut}
+          options={[{ label: "None", value: undefined }, ...getDolColorOptions()]}
+          onChange={handleDonutChanged}
+          attributeColor={"yellow"}
+          renderOption={renderDonutOption}
+        />
+        <AttributePickerShell
+          id="subject-attribute"
+          label="Subject"
+          currentValue={subject}
+          options={[{ label: "None", value: undefined }, ...getSubjectOptions()]}
+          onChange={handleSubjectChanged}
+          attributeColor={"yellow"}
+          renderOption={renderSubjectOption}
+        />
+        {
+          // Each AttributePickerShell is a label sitting above its trigger
+          // button, so the outer row's items-center centers this against
+          // the *label+button* pair, not the button alone - the icon reads
+          // as vertically off from the pickers themselves. Fixed by mirroring
+          // that same two-part shape here: an invisible label-height spacer
+          // (real label markup/classes, not a guessed number, so it tracks
+          // automatically if the label style ever changes) sits above a box
+          // matched to the trigger's own rendered height (measured: 30px),
+          // with the icon centered inside that box - not the icon itself.
+        }
+        <div className="flex flex-col items-center mt-2 lg:mt-0 lg:ml-2">
+          <span aria-hidden className="invisible block text-[10px] uppercase pb-1">&nbsp;</span>
+          <div className="h-[30px] flex items-center">
+            <MdAutorenew
+              size={40}
+              className={twMerge("p-[6px] shadow-md rounded-full cursor-pointer", "animate-color-cycle")}
+              title="Randomize"
+              role="button"
+              aria-label="Randomize"
+              onClick={handleRandomizeClick}
+              onKeyDown={handleRandomizeKeyDown}
+              tabIndex={0}
+            />
+          </div>
+        </div>
+      </div>
+      <div>
+        <label
+          htmlFor="inscription-attribute"
+          className={twMerge("block text-[10px] uppercase pb-1", getLabelTextColorClass("yellow"))}
+        >
+          Inscription (optional)
+        </label>
+        <input
+          id="inscription-attribute"
+          type="text"
+          value={inscription ?? ""}
+          maxLength={MAX_INSCRIPTION_LENGTH}
+          onChange={(e) => handleInscriptionChanged(e.target.value)}
+          placeholder="A short note, on the permanent record"
+          className={twMerge(
+            "w-full border rounded p-4 text-sm font-mono",
+            "bg-dol-dark text-dol-light placeholder-gray-medium",
+            "outline-none focus:ring-2 focus:ring-dol-yellow",
+            getTwDolColor("yellow", TwColorClassPrefix.Background, 25),
+            getTwDolColor("yellow", TwColorClassPrefix.Border),
+          )}
+        />
+        <div className="text-right text-[10px] text-gray-medium mt-1">
+          {(inscription ?? "").length}/{MAX_INSCRIPTION_LENGTH}
         </div>
       </div>
     </div>
