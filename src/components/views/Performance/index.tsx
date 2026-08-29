@@ -3,6 +3,7 @@ import { usePathname } from "next/navigation";
 import {
   extractBgColor,
   extractDonut,
+  extractPerformanceAttributes,
   extractSubject,
   getPositionInSet,
   getSetlistLines,
@@ -29,7 +30,7 @@ import {
   OtherAttributes,
 } from "@/components/views/Performance/AttributeSections";
 import { HowMintingWorksNote } from "@/components/views/Performance/HowMintingWorksNote";
-import { ImageAttributesSection } from "@/components/views/Performance/ImageAttributesSection";
+import { CustomizableAttributesSection } from "@/components/views/Performance/CustomizableAttributesSection";
 import { InactiveMintNote } from "@/components/views/Performance/InactiveMintNote";
 import { MintAction } from "@/components/views/Performance/MintAction";
 import { PerformanceAudioPlayer } from "@/components/views/Performance/PerformanceAudioPlayer";
@@ -59,9 +60,10 @@ export const Performance = (): React.ReactNode => {
   const [bgColor, setBgColor] = useState<DolColorHex>(DolColorHex.Dark);
   const [donut, setDonut] = useState<DolColorHex | undefined>(DolColorHex.Red);
   const [subject, setSubject] = useState<Subject | undefined>(Subject.Lizard);
+  const [inscription, setInscription] = useState<string>("");
   const [attributes, setAttributes] = useState<PerformanceAttributes>({});
   const [pageLoaded, setPageLoaded] = useState(false);
-  const [showImageAttributes, setShowImageAttributes] = useState(false);
+  const [showCustomizableAttributes, setShowCustomizableAttributes] = useState(false);
   // Which performance (date:position) the auto-randomize effect below has
   // already run for - keyed rather than a plain boolean since this
   // component stays mounted across in-app navigation between performances
@@ -98,6 +100,7 @@ export const Performance = (): React.ReactNode => {
       bgColor,
       donut,
       subject,
+      inscription: inscription.trim() || undefined,
     };
 
     if (setlist) {
@@ -148,33 +151,34 @@ export const Performance = (): React.ReactNode => {
     }
 
     setAttributes(newAttributes);
-  }, [bgColor, donut, subject, track, setlist, setlists, song]);
+  }, [bgColor, donut, subject, inscription, track, setlist, setlists, song]);
 
-  // Set bgColor, donut, and subject from metadata
+  // Set bgColor, donut, subject, and inscription from metadata
   useEffect(() => {
     if (metadata && metadata.attributes) {
       setBgColor(extractBgColor(metadata.attributes, DolColorHex.Dark));
       setDonut(extractDonut(metadata.attributes));
       setSubject(extractSubject(metadata.attributes));
+      setInscription(extractPerformanceAttributes(metadata.attributes).inscription ?? "");
     }
   }, [metadata]);
 
   // Reset the one-way "loaded" latches below when navigating to a
   // different performance (Finding 59) - this component doesn't remount
   // on route changes (see randomizedForRef above), so without this,
-  // showImageAttributes/pageLoaded could still read `true` from whatever
+  // showCustomizableAttributes/pageLoaded could still read `true` from whatever
   // performance was on screen before, letting PerformanceImage render a
   // stale image/attributes for an instant instead of the loading state
   // while the new performance's own data is still in flight.
   useEffect(() => {
-    setShowImageAttributes(false);
+    setShowCustomizableAttributes(false);
     setPageLoaded(false);
   }, [date, position]);
 
-  // Set showImageAttributes and pageLoaded based on loading states
+  // Set showCustomizableAttributes and pageLoaded based on loading states
   useEffect(() => {
-    if (!showImageAttributes) {
-      setShowImageAttributes(
+    if (!showCustomizableAttributes) {
+      setShowCustomizableAttributes(
         !setlistLoading && !performanceLoading && !metadataLoading
       );
     }
@@ -196,7 +200,7 @@ export const Performance = (): React.ReactNode => {
     performanceLoading,
     metadataLoading,
     pageLoaded,
-    showImageAttributes,
+    showCustomizableAttributes,
   ]);
 
   const handleBgColorChanged = useCallback((color?: string) => {
@@ -215,6 +219,10 @@ export const Performance = (): React.ReactNode => {
   const handleSubjectChanged = useCallback((position?: string) => {
     setSubject(position as Subject | undefined);
   }, [setSubject]);
+
+  const handleInscriptionChanged = useCallback((value: string) => {
+    setInscription(value);
+  }, [setInscription]);
 
   const randomizeAttributes = () => {
     const randomBgColor = getRandomAttribute<DolColorHex>(bgColors);
@@ -245,7 +253,7 @@ export const Performance = (): React.ReactNode => {
   }, [date, position, performance, performanceLoading, serial]);
 
   const handleRandomizeKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Now that ImageAttributes' randomize control has role="button"
+    // Now that CustomizableAttributes' randomize control has role="button"
     // (Finding 39), Space should activate it too, matching a native
     // <button>'s keyboard contract, not just Enter.
     if (e.key === "Enter" || e.key === " ") {
@@ -270,14 +278,16 @@ export const Performance = (): React.ReactNode => {
     ? getPositionInSet(setlists, setlist.set, setlist.position)
     : undefined;
 
-  const imageAttributesProps = {
+  const customizableAttributesProps = {
     bgColor,
     donut,
     subject,
+    inscription,
     minted: Boolean(serial),
     handleBgColorChanged,
     handleDonutChanged,
     handleSubjectChanged,
+    handleInscriptionChanged,
     handleRandomizeClick,
     handleRandomizeKeyDown,
   };
@@ -299,7 +309,7 @@ export const Performance = (): React.ReactNode => {
         />
         <div className="relative w-full">
           <PerformanceImage
-            loading={metadataLoading || !showImageAttributes}
+            loading={metadataLoading || !showCustomizableAttributes}
             metadata={metadata}
             song={attributes.song}
             performanceId={attributes.performanceId}
@@ -336,10 +346,10 @@ export const Performance = (): React.ReactNode => {
 
       <HowMintingWorksNote show={isAvailable} />
 
-      <ImageAttributesSection show={showImageAttributes && !serial} {...imageAttributesProps} />
+      <CustomizableAttributesSection show={showCustomizableAttributes && !serial} {...customizableAttributesProps} />
 
       <Disclosure summary="Details">
-        <ImageAttributesSection show={showImageAttributes && Boolean(serial)} {...imageAttributesProps} />
+        <CustomizableAttributesSection show={showCustomizableAttributes && Boolean(serial)} {...customizableAttributesProps} />
 
         <SectionHeader text="Fixed NFT Attributes" />
         <FixedAttributes

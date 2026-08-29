@@ -79,8 +79,65 @@ describe("/api/mint/[accountId]/[showDate]/[position]/prepare POST", () => {
       "bafy-cid",
       "1998-07-29",
       1,
-      "0.0.1"
+      "0.0.1",
+      undefined,
+      undefined
     );
+  });
+
+  it("passes a provided inscription through to the on-chain metadata update", async () => {
+    await POST(makeRequest({ song: "Test", inscription: "for jenny" }), {
+      params: Promise.resolve({ accountId: "0.0.1", showDate: "1998-07-29", position: "1" }),
+    });
+    expect(submitNftMetadataUpdateMock).toHaveBeenCalledWith(
+      "0.0.token",
+      7,
+      "bafy-cid",
+      "1998-07-29",
+      1,
+      "0.0.1",
+      undefined,
+      "for jenny"
+    );
+  });
+
+  it("trims a whitespace-only inscription down to undefined rather than storing blank text", async () => {
+    await POST(makeRequest({ song: "Test", inscription: "   " }), {
+      params: Promise.resolve({ accountId: "0.0.1", showDate: "1998-07-29", position: "1" }),
+    });
+    expect(submitNftMetadataUpdateMock).toHaveBeenCalledWith(
+      "0.0.token",
+      7,
+      "bafy-cid",
+      "1998-07-29",
+      1,
+      "0.0.1",
+      undefined,
+      undefined
+    );
+  });
+
+  it("rejects an inscription over the character limit before doing any work", async () => {
+    const res = await POST(makeRequest({ song: "Test", inscription: "x".repeat(101) }), {
+      params: Promise.resolve({ accountId: "0.0.1", showDate: "1998-07-29", position: "1" }),
+    });
+    expect(res.status).toBe(400);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an inscription right at the character limit", async () => {
+    const res = await POST(makeRequest({ song: "Test", inscription: "x".repeat(100) }), {
+      params: Promise.resolve({ accountId: "0.0.1", showDate: "1998-07-29", position: "1" }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a non-string inscription", async () => {
+    const res = await POST(makeRequest({ song: "Test", inscription: 12345 }), {
+      params: Promise.resolve({ accountId: "0.0.1", showDate: "1998-07-29", position: "1" }),
+    });
+    expect(res.status).toBe(400);
+    expect(claimPerformanceMock).not.toHaveBeenCalled();
   });
 
   // See PUNCHLIST.md's metadata-reset-on-release finding: this is the
