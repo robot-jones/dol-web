@@ -72,6 +72,15 @@ export const TermsOfService = (): React.ReactNode => {
           draws to a close. None of that changes what you already hold —
           only what you&apos;re able to claim going forward.
         </div>
+        <div className="pt-4">
+          When customizing a page, you may optionally add a short{" "}
+          <span className="font-bold">Inscription</span> — up to 100
+          characters, forever etched into that NFT&apos;s metadata. Keep it
+          clean: no harassment, hate speech, illegal content, spam, or
+          links. 🚫 We reserve the right to review, remove, or replace any
+          Inscription that violates these Terms, without notice and without
+          obligation to do so.
+        </div>
       </div>
       {divider}
       <div>

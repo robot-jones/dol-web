@@ -4,4 +4,4 @@
 // wallet agrees - the server always writes this constant, never a value
 // taken from the client, so a request can't assert agreement to a version
 // other than what's actually live.
-export const LEGAL_TERMS_UPDATED = "8/16/2026";
+export const LEGAL_TERMS_UPDATED = "8/29/2026";
