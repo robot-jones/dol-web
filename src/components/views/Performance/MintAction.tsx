@@ -121,6 +121,27 @@ export const MintAction = ({
     return () => clearInterval(interval);
   }, [lockedBy, bagEntry]);
 
+  // "Update Bag Item" (CART.md): mirrors this page's live attribute edits
+  // into the cart's draft store while this item sits "ready" in the bag,
+  // so the Bag's refresh icon has something to push. Deliberately narrow -
+  // only syncs, never itself decides whether anything's actually dirty
+  // (Bag.tsx does that, comparing against the item's own published
+  // attributes) or calls the server. `bagEntry` stays referentially stable
+  // across renders that don't touch cart.items (see cart/context.tsx's
+  // itemsRef), so this doesn't re-fire on every unrelated cart update.
+  // cart.setDraftAttributes deliberately isn't in the dependency array -
+  // it's a plain closure recreated every CartContextProvider render (not a
+  // useState setter), so depending on it would re-fire this effect on
+  // every cart change of any kind, including the one this effect itself
+  // causes - an infinite loop. Safe to omit: it only ever does a
+  // functional setState update, so it never needs a "fresh" closure.
+  useEffect(() => {
+    if (bagEntry?.status === "ready") {
+      cart.setDraftAttributes(showDate, position, attributes);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bagEntry, attributes, showDate, position]);
+
   // Bug reported live on preview (2026-08-27): this used to be
   // fire-and-forget, so a failed connect attempt (e.g. the wallet's relay
   // subscription failing) surfaced nowhere - the pill just sat there and

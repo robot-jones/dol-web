@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useEffect, useRef, useState, ReactNode, Context } from "react";
-import { CartItem, PendingCartItem, ReadyCartItem } from "./types";
+import { PerformanceAttributes } from "@erikmuir/dol-lib/types";
+import { cartItemKey, CartItem, PendingCartItem, ReadyCartItem } from "./types";
 
 const STORAGE_KEY = "dol-cart";
 // Hedera Token Service's own per-transfer NFT limit - matches
@@ -25,8 +26,16 @@ export type CartContextValue = {
   addPendingItem: (showDate: string, position: number, song: string) => boolean;
   // Replaces a pending item with its resolved, ready form once prepare()
   // actually succeeds. No-op if the item isn't there (e.g. already
-  // removed) or isn't pending any more.
-  resolvePendingItem: (showDate: string, position: number, serial: number, lockedAt?: number) => void;
+  // removed) or isn't pending any more. `attributes` is what was actually
+  // sent to prepare() - stored as the item's dirty-check baseline for
+  // "Update Bag Item" (see draftAttributes below).
+  resolvePendingItem: (
+    showDate: string,
+    position: number,
+    serial: number,
+    lockedAt?: number,
+    attributes?: PerformanceAttributes
+  ) => void;
   // Drops a pending item that failed to prepare and records why, so the
   // bag can surface it if it's open. Deliberately not a persistent
   // per-item error row - see lastError below.
@@ -55,6 +64,20 @@ export type CartContextValue = {
   // that, so mounting doesn't itself count as a request.
   bagOpenRequestCount: number;
   requestBagOpen: () => void;
+  // "Update Bag Item": live attribute edits, mirrored in from whichever
+  // performance page is currently open for a "ready" item (MintAction.tsx),
+  // keyed by cartItemKey. Deliberately in-memory only - never written to
+  // sessionStorage alongside `items` - so a stale draft from an earlier
+  // page visit or session can never make the Bag's update icon appear with
+  // nothing live behind it (a reload always starts this empty). The Bag
+  // compares a draft against its item's own `attributes` snapshot to
+  // decide whether there's actually anything new to push.
+  draftAttributes: Record<string, PerformanceAttributes>;
+  setDraftAttributes: (showDate: string, position: number, attributes: PerformanceAttributes) => void;
+  // Called after a server-side update actually succeeds: moves the pushed
+  // attributes into the item's own snapshot (so the dirty-check goes false
+  // again) and clears its draft entry.
+  applyUpdatedAttributes: (showDate: string, position: number, attributes: PerformanceAttributes) => void;
 };
 
 const defaultContext: CartContextValue = {
@@ -69,6 +92,9 @@ const defaultContext: CartContextValue = {
   expireReadyItem: () => {},
   bagOpenRequestCount: 0,
   requestBagOpen: () => {},
+  draftAttributes: {},
+  setDraftAttributes: () => {},
+  applyUpdatedAttributes: () => {},
 };
 
 export const CartContext: Context<CartContextValue> = createContext(defaultContext);
@@ -102,6 +128,7 @@ export const CartContextProvider = (props: {
   const itemsRef = useRef<CartItem[]>(defaultContext.items);
   const [lastError, setLastError] = useState<string | null>(null);
   const [bagOpenRequestCount, setBagOpenRequestCount] = useState(0);
+  const [draftAttributes, setDraftAttributesState] = useState<Record<string, PerformanceAttributes>>({});
   // Reading sessionStorage has to happen in an effect, not the useState
   // initializer - it's unavailable during SSR, and seeding real data into
   // the initializer would mismatch the server-rendered empty state.
@@ -166,7 +193,13 @@ export const CartContextProvider = (props: {
     return true;
   };
 
-  const resolvePendingItem = (showDate: string, position: number, serial: number, lockedAt?: number) => {
+  const resolvePendingItem = (
+    showDate: string,
+    position: number,
+    serial: number,
+    lockedAt?: number,
+    attributes?: PerformanceAttributes
+  ) => {
     const current = itemsRef.current;
     const index = findIndex(current, showDate, position);
     if (index === -1 || current[index].status !== "pending") return;
@@ -177,6 +210,7 @@ export const CartContextProvider = (props: {
       song: current[index].song,
       serial,
       lockedAt,
+      attributes,
     };
     const next = [...current];
     next[index] = ready;
@@ -211,6 +245,27 @@ export const CartContextProvider = (props: {
 
   const requestBagOpen = () => setBagOpenRequestCount((prev) => prev + 1);
 
+  const setDraftAttributes = (showDate: string, position: number, attributes: PerformanceAttributes) => {
+    setDraftAttributesState((prev) => ({ ...prev, [cartItemKey(showDate, position)]: attributes }));
+  };
+
+  const applyUpdatedAttributes = (showDate: string, position: number, attributes: PerformanceAttributes) => {
+    const current = itemsRef.current;
+    const index = findIndex(current, showDate, position);
+    if (index !== -1 && current[index].status === "ready") {
+      const next = [...current];
+      next[index] = { ...(current[index] as ReadyCartItem), attributes };
+      setItems(next);
+    }
+    setDraftAttributesState((prev) => {
+      const key = cartItemKey(showDate, position);
+      if (!(key in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[key];
+      return rest;
+    });
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -225,6 +280,9 @@ export const CartContextProvider = (props: {
         expireReadyItem,
         bagOpenRequestCount,
         requestBagOpen,
+        draftAttributes,
+        setDraftAttributes,
+        applyUpdatedAttributes,
       }}
     >
       {props.children}

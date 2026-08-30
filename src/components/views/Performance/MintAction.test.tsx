@@ -83,6 +83,13 @@ const BagOpenRequestCounter = () => {
   return <div data-testid="bag-open-request-count">{cart.bagOpenRequestCount}</div>;
 };
 
+// Observes cart.draftAttributes via the same public API Bag.tsx reads it
+// through, for "Update Bag Item"'s draft-sync effect below.
+const DraftAttributesProbe = () => {
+  const cart = useCart();
+  return <div data-testid="draft-attributes">{JSON.stringify(cart.draftAttributes)}</div>;
+};
+
 const renderMintAction = (
   props: Partial<MintActionProps> = {},
   seedItems: { showDate: string; position: number; song: string; serial?: number; lockedAt?: number }[] = []
@@ -239,6 +246,70 @@ describe("MintAction", () => {
       ]);
       expect(screen.getByText("In Your Bag")).toBeInTheDocument();
       expect(screen.getByText(/Locked for/)).toBeInTheDocument();
+    });
+  });
+
+  // "Update Bag Item" (CART.md): mirrors live attribute edits into the
+  // cart's draft store while this item sits "ready" in the bag, so the
+  // Bag's refresh icon has something to push.
+  describe("draft attributes sync (Update Bag Item)", () => {
+    it("syncs the current attributes into the cart draft once the item is ready", () => {
+      render(
+        <CartContextProvider>
+          <SeedItems items={[{ showDate: "1998-07-29", position: 1, song: "Wilson", serial: 7 }]} />
+          <DraftAttributesProbe />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#000000" } as never} />
+        </CartContextProvider>
+      );
+
+      expect(screen.getByTestId("draft-attributes")).toHaveTextContent(
+        JSON.stringify({ "1998-07-29:1": { song: "Wilson", bgColor: "#000000" } })
+      );
+    });
+
+    it("does not sync a draft while the item is still pending, not yet ready", () => {
+      render(
+        <CartContextProvider>
+          <SeedItems items={[{ showDate: "1998-07-29", position: 1, song: "Wilson" }]} />
+          <DraftAttributesProbe />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#000000" } as never} />
+        </CartContextProvider>
+      );
+
+      expect(screen.getByTestId("draft-attributes")).toHaveTextContent("{}");
+    });
+
+    it("does not sync a draft when this item isn't in the bag at all", () => {
+      render(
+        <CartContextProvider>
+          <DraftAttributesProbe />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#000000" } as never} />
+        </CartContextProvider>
+      );
+
+      expect(screen.getByTestId("draft-attributes")).toHaveTextContent("{}");
+    });
+
+    it("re-syncs when the live attributes change", () => {
+      const { rerender } = render(
+        <CartContextProvider>
+          <SeedItems items={[{ showDate: "1998-07-29", position: 1, song: "Wilson", serial: 7 }]} />
+          <DraftAttributesProbe />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#000000" } as never} />
+        </CartContextProvider>
+      );
+
+      rerender(
+        <CartContextProvider>
+          <SeedItems items={[{ showDate: "1998-07-29", position: 1, song: "Wilson", serial: 7 }]} />
+          <DraftAttributesProbe />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#ffffff" } as never} />
+        </CartContextProvider>
+      );
+
+      expect(screen.getByTestId("draft-attributes")).toHaveTextContent(
+        JSON.stringify({ "1998-07-29:1": { song: "Wilson", bgColor: "#ffffff" } })
+      );
     });
   });
 
