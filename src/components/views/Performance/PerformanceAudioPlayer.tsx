@@ -35,7 +35,7 @@ const controlHeightClassName = "h-12";
 const badgeClassName = twMerge(
   "flex items-center justify-center w-12 rounded-full shrink-0",
   controlHeightClassName,
-  "backdrop-blur-sm border border-dol-light/20 shadow-md"
+  "bg-dol-dark/60 backdrop-blur-sm border border-dol-light/20 shadow-md"
 );
 
 const drawerAudioClassName = twMerge(
@@ -91,31 +91,32 @@ export const PerformanceAudioPlayer = ({
       </button>
       {/* basis-0 + transition-[flex-grow]: animates the drawer's width
           without a hardcoded pixel target, since the available space
-          depends on the image's responsive width. */}
+          depends on the image's responsive width. The pill chrome
+          (blur/border/shadow) lives here rather than on a wrapper around
+          the audio element - it always fills this div exactly, so a
+          separate layer for it would just be a same-sized no-op.
+          opacity rides along with the width: at grow-0/basis-0 the border
+          still has its own width and renders as a stray hairline next to
+          the badge even though there's no content width left to hold it,
+          so closed also means invisible, not just empty. */}
       <div
         id={drawerId}
         inert={!isOpen}
         className={twMerge(
-          "flex items-center basis-0 overflow-hidden rounded-full transition-[flex-grow] duration-300 ease-in-out",
-          isOpen ? "grow" : "grow-0"
+          "flex items-center basis-0 overflow-hidden rounded-full backdrop-blur-sm border border-dol-light/20 shadow-md transition-[flex-grow,opacity] duration-300 ease-in-out",
+          controlHeightClassName,
+          isOpen ? "grow opacity-100" : "grow-0 opacity-0"
         )}
       >
-        <div
-          className={twMerge(
-            "flex items-center w-full rounded-full backdrop-blur-sm border border-dol-light/20 shadow-md",
-            controlHeightClassName
-          )}
-        >
-          {/* preload="none": most visitors never hit play, so don't fetch
-              the mp3 until they ask for it. */}
-          <audio
-            src={src}
-            controls
-            preload="none"
-            style={{ colorScheme: "dark" }}
-            className={drawerAudioClassName}
-          />
-        </div>
+        {/* preload="none": most visitors never hit play, so don't fetch
+            the mp3 until they ask for it. */}
+        <audio
+          src={src}
+          controls
+          preload="none"
+          style={{ colorScheme: "dark" }}
+          className={drawerAudioClassName}
+        />
       </div>
     </div>
   );
