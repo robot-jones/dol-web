@@ -6,9 +6,13 @@ import { useSetlists } from "@/hooks/use-setlists";
 import { useReviewsByDate } from "@/hooks/use-reviews";
 import { useShow } from "@/hooks/use-shows";
 import { usePerformances } from "@/hooks/use-performances";
+import { isRecentShow } from "@/utils";
 import { Error } from "../Error";
 import { ShowHeader } from "./ShowHeader";
 import { SongRow } from "./SongRow";
+
+const containerClassName =
+  "w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mx-auto flex flex-col items-center mt-8";
 
 export const Show = (): React.ReactElement => {
   const pathname = usePathname();
@@ -17,10 +21,13 @@ export const Show = (): React.ReactElement => {
   const { performances } = usePerformances(date);
   const { setlists, setlistsLoading } = useSetlists(date);
   const { reviews } = useReviewsByDate(date);
-  const { show } = useShow(date);
+  const { show, showLoading } = useShow(date);
   const daysUntilShow = daysUntil(date);
 
-  if (daysUntilShow >= 0) {
+  // Strictly future (the day of the show itself falls through to the
+  // setlist/pending view below, not the countdown - once doors open, fans
+  // want to see the list fill in, not a frozen "0 days left").
+  if (daysUntilShow > 0) {
     return (
       <Error
         message={`Just ${daysUntilShow} ${
@@ -30,12 +37,26 @@ export const Show = (): React.ReactElement => {
     );
   }
 
-  if (setlistsLoading) {
+  if (setlistsLoading || showLoading) {
     return <Loading showLyric />;
   }
 
   if (!setlists || setlists.length === 0) {
-    notFound();
+    // Same recency heuristic as the audio player: a show that just happened
+    // (or is happening tonight) probably just hasn't had its setlist
+    // uploaded yet, so say that instead of a flat 404.
+    if (!isRecentShow(date)) {
+      notFound();
+    }
+
+    return (
+      <div className={containerClassName}>
+        {show && <ShowHeader {...show} />}
+        <div className="text-xl text-center text-gray-medium pb-16">
+          Setlists haven&apos;t been uploaded yet — check back soon.
+        </div>
+      </div>
+    );
   }
 
   const getDistinctSets = (): string[] => [
@@ -43,7 +64,7 @@ export const Show = (): React.ReactElement => {
   ];
 
   return (
-    <div className="w-full max-w-[320px] sm:max-w-[448px] md:max-w-[500px] lg:max-w-[680px] mx-auto flex flex-col items-center mt-8">
+    <div className={containerClassName}>
       <ShowHeader {...setlists[0]} />
       <div className="flex flex-col items-center gap-8 pb-16 w-full">
         {getDistinctSets().map((set) => {

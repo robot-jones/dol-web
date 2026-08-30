@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { FaMusic } from "react-icons/fa";
 import { twMerge } from "tailwind-merge";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
-import { getTwDolColor, TwColorClassPrefix } from "@/utils";
+import { getTwDolColor, isRecentShow, TwColorClassPrefix } from "@/utils";
 
 export type PerformanceAudioPlayerProps = {
   src?: string;
@@ -41,19 +41,11 @@ const controlHeightClassName = "h-12";
 
 // There's no "audio processed/uploaded" signal anywhere in our data (phish.in
 // doesn't surface one at the track level, and we don't store one ourselves) -
-// so recency is a heuristic based on the show date itself. A year is a
-// generous window for phish.in to catch up; past that we stop implying the
-// audio is still coming.
-const UNAVAILABLE_MESSAGE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
-
-const getUnavailableMessage = (showDate?: string): string => {
-  const showTime = showDate ? new Date(showDate).getTime() : NaN;
-  const isRecent =
-    !Number.isNaN(showTime) && Date.now() - showTime <= UNAVAILABLE_MESSAGE_MAX_AGE_MS;
-  return isRecent
+// so recency is a heuristic based on the show date itself (see isRecentShow).
+const getUnavailableMessage = (showDate?: string): string =>
+  isRecentShow(showDate)
     ? "Audio hasn't been uploaded yet — check back soon."
     : "No mp3 recording exists for this performance.";
-};
 
 const badgeClassName = twMerge(
   "flex items-center justify-center w-12 rounded-full shrink-0",
