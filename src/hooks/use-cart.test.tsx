@@ -126,6 +126,20 @@ describe("useCart", () => {
     ]);
   });
 
+  it("resolvePendingItem stores the attributes it was sent as the item's published snapshot", async () => {
+    const { result } = renderUseCart();
+    await waitFor(() => expect(result.current.items).toEqual([]));
+
+    act(() => {
+      result.current.addPendingItem("1998-07-29", 1, "Runaway Jim");
+    });
+    act(() => {
+      result.current.resolvePendingItem("1998-07-29", 1, 7, 1786300000000, { bgColor: "#000000" } as never);
+    });
+
+    expect((result.current.items[0] as ReadyCartItem).attributes).toEqual({ bgColor: "#000000" });
+  });
+
   it("resolvePendingItem is a no-op if the item isn't there any more", async () => {
     const { result } = renderUseCart();
     await waitFor(() => expect(result.current.items).toEqual([]));
@@ -282,5 +296,82 @@ describe("useCart", () => {
     await waitFor(() => expect(result.current.items).toEqual([readyItem1]));
 
     expect(JSON.parse(sessionStorage.getItem("dol-cart")!)).toEqual([readyItem1]);
+  });
+
+  describe("Update Bag Item", () => {
+    it("setDraftAttributes stores a draft keyed by showDate/position", async () => {
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toEqual([]));
+
+      act(() => {
+        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
+      });
+
+      expect(result.current.draftAttributes["1998-07-29:1"]).toEqual({ bgColor: "#ffffff" });
+    });
+
+    it("setDraftAttributes for a second item doesn't clobber the first", async () => {
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toEqual([]));
+
+      act(() => {
+        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
+        result.current.setDraftAttributes("1998-07-29", 2, { bgColor: "#000000" } as never);
+      });
+
+      expect(result.current.draftAttributes["1998-07-29:1"]).toEqual({ bgColor: "#ffffff" });
+      expect(result.current.draftAttributes["1998-07-29:2"]).toEqual({ bgColor: "#000000" });
+    });
+
+    it("applyUpdatedAttributes sets the ready item's attributes snapshot and clears its draft", async () => {
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toEqual([]));
+
+      act(() => {
+        result.current.addPendingItem(readyItem1.showDate, readyItem1.position, readyItem1.song);
+        result.current.resolvePendingItem(readyItem1.showDate, readyItem1.position, readyItem1.serial, readyItem1.lockedAt, {
+          bgColor: "#000000",
+        } as never);
+        result.current.setDraftAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+      });
+
+      act(() => {
+        result.current.applyUpdatedAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+      });
+
+      expect((result.current.items[0] as ReadyCartItem).attributes).toEqual({ bgColor: "#ffffff" });
+      expect(result.current.draftAttributes["1998-07-29:1"]).toBeUndefined();
+    });
+
+    it("applyUpdatedAttributes is a no-op on cart items when the item isn't there any more, but still clears the draft", async () => {
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toEqual([]));
+
+      act(() => {
+        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
+        result.current.applyUpdatedAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
+      });
+
+      expect(result.current.items).toEqual([]);
+      expect(result.current.draftAttributes["1998-07-29:1"]).toBeUndefined();
+    });
+
+    // Deliberately in-memory only (CartContext's own documented design) -
+    // a stale draft from a previous session must never make the Bag's
+    // update icon appear with nothing live behind it.
+    it("never persists draftAttributes to sessionStorage", async () => {
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toEqual([]));
+
+      act(() => {
+        result.current.addPendingItem(readyItem1.showDate, readyItem1.position, readyItem1.song);
+        result.current.resolvePendingItem(readyItem1.showDate, readyItem1.position, readyItem1.serial, readyItem1.lockedAt);
+        result.current.setDraftAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+      });
+      await waitFor(() => expect(sessionStorage.getItem("dol-cart")).not.toBeNull());
+
+      const stored = JSON.parse(sessionStorage.getItem("dol-cart")!);
+      expect(stored[0].draftAttributes).toBeUndefined();
+    });
   });
 });
