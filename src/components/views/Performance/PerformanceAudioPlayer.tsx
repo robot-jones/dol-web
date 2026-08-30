@@ -6,6 +6,7 @@ import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 
 export type PerformanceAudioPlayerProps = {
   src?: string;
+  showDate?: string;
   loading?: boolean;
   className?: string;
 };
@@ -15,6 +16,12 @@ export type PerformanceAudioPlayerProps = {
 // the NFT image (inset by a gap on each side, positioned by the parent via
 // `className`) instead of buried in the Details disclosure. The badge only
 // opens/closes the drawer - it never starts playback itself.
+//
+// Always renders, even when there's no mp3 - some performances never had a
+// recording made, and recent ones just haven't had their audio processed
+// and uploaded to phish.in yet. When `src` is missing, the drawer shows an
+// explanatory message instead of controls (see UNAVAILABLE_MESSAGE_MAX_AGE_MS
+// below for how we distinguish the two cases).
 //
 // The <audio> element stays mounted (just visually collapsed) rather than
 // unmounting on close, so closing the drawer doesn't stop a track that's
@@ -32,6 +39,22 @@ export type PerformanceAudioPlayerProps = {
 // particular theme color.
 const controlHeightClassName = "h-12";
 
+// There's no "audio processed/uploaded" signal anywhere in our data (phish.in
+// doesn't surface one at the track level, and we don't store one ourselves) -
+// so recency is a heuristic based on the show date itself. A year is a
+// generous window for phish.in to catch up; past that we stop implying the
+// audio is still coming.
+const UNAVAILABLE_MESSAGE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
+const getUnavailableMessage = (showDate?: string): string => {
+  const showTime = showDate ? new Date(showDate).getTime() : NaN;
+  const isRecent =
+    !Number.isNaN(showTime) && Date.now() - showTime <= UNAVAILABLE_MESSAGE_MAX_AGE_MS;
+  return isRecent
+    ? "Audio hasn't been uploaded yet — check back soon."
+    : "No mp3 recording exists for this performance.";
+};
+
 const badgeClassName = twMerge(
   "flex items-center justify-center w-12 rounded-full shrink-0",
   controlHeightClassName,
@@ -46,6 +69,7 @@ const drawerAudioClassName = twMerge(
 
 export const PerformanceAudioPlayer = ({
   src,
+  showDate,
   loading,
   className,
 }: PerformanceAudioPlayerProps): React.ReactNode => {
@@ -65,10 +89,6 @@ export const PerformanceAudioPlayer = ({
         <AnimatedDonut sizeInPixels={32} color="light" />
       </div>
     );
-  }
-
-  if (!src) {
-    return null;
   }
 
   // Width comes from the parent via `className` (e.g. `left-4 right-4`
@@ -92,7 +112,7 @@ export const PerformanceAudioPlayer = ({
       {/* basis-0 + transition-[flex-grow]: animates the drawer's width
           without a hardcoded pixel target, since the available space
           depends on the image's responsive width. The pill chrome
-          (blur/border/shadow) lives here rather than on a wrapper around
+          (bg/blur/border/shadow) lives here rather than on a wrapper around
           the audio element - it always fills this div exactly, so a
           separate layer for it would just be a same-sized no-op.
           opacity rides along with the width: at grow-0/basis-0 the border
@@ -103,20 +123,32 @@ export const PerformanceAudioPlayer = ({
         id={drawerId}
         inert={!isOpen}
         className={twMerge(
-          "flex items-center basis-0 overflow-hidden rounded-full backdrop-blur-sm border border-dol-light/20 shadow-md transition-[flex-grow,opacity] duration-300 ease-in-out",
+          "flex items-center basis-0 overflow-hidden rounded-full bg-dol-dark/60 backdrop-blur-sm border border-dol-light/20 shadow-md transition-[flex-grow,opacity] duration-300 ease-in-out",
           controlHeightClassName,
           isOpen ? "grow opacity-100" : "grow-0 opacity-0"
         )}
       >
-        {/* preload="none": most visitors never hit play, so don't fetch
-            the mp3 until they ask for it. */}
-        <audio
-          src={src}
-          controls
-          preload="none"
-          style={{ colorScheme: "dark" }}
-          className={drawerAudioClassName}
-        />
+        {src ? (
+          // preload="none": most visitors never hit play, so don't fetch
+          // the mp3 until they ask for it.
+          <audio
+            src={src}
+            controls
+            preload="none"
+            style={{ colorScheme: "dark" }}
+            className={drawerAudioClassName}
+          />
+        ) : (
+          <p
+            className={twMerge(
+              "w-full h-full flex items-center px-4 text-sm truncate",
+              getTwDolColor("light", TwColorClassPrefix.Text)
+            )}
+            title={getUnavailableMessage(showDate)}
+          >
+            {getUnavailableMessage(showDate)}
+          </p>
+        )}
       </div>
     </div>
   );

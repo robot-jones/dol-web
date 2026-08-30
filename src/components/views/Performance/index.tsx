@@ -319,6 +319,7 @@ export const Performance = (): React.ReactNode => {
           />
           <PerformanceAudioPlayer
             src={attributes.mp3}
+            showDate={attributes.date}
             loading={trackLoading}
             className="absolute top-4 left-4 right-4 z-[5]"
           />
