@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { FaPlay, FaPause } from "react-icons/fa";
+import { useEffect, useId, useState } from "react";
+import { FaMusic } from "react-icons/fa";
 import { twMerge } from "tailwind-merge";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
+import { getTwDolColor, TwColorClassPrefix } from "@/utils";
 
 export type PerformanceAudioPlayerProps = {
   src?: string;
@@ -9,21 +10,38 @@ export type PerformanceAudioPlayerProps = {
   className?: string;
 };
 
-// Minimal play/pause for the performance's mp3, overlaid on the NFT image
-// (top-left corner, positioned by the parent via `className`) instead of
-// buried in the Details disclosure. No autoplay, no loop, unmuted - just a
-// toggle, so there's no browser autoplay-policy handling to carry. The full
-// native <audio controls> widget still lives in Fixed NFT Attributes/MP3
-// (FixedAttributes.tsx) - deliberately not duplicated here, so there's only
-// ever one playable copy of the audio on the page.
+// A musical-note badge that toggles a control drawer (native
+// <audio controls>: play/pause, seek, volume), overlaid across the top of
+// the NFT image (inset by a gap on each side, positioned by the parent via
+// `className`) instead of buried in the Details disclosure. The badge only
+// opens/closes the drawer - it never starts playback itself.
 //
-// Dark/blurred circle rather than the app's usual dol-blue styling - this
+// The <audio> element stays mounted (just visually collapsed) rather than
+// unmounting on close, so closing the drawer doesn't stop a track that's
+// already playing.
+//
+// The native controls styling is borrowed from AudioAttribute.tsx, which
+// used to be Fixed NFT Attributes/MP3's playable copy - that's now just a
+// link (see FixedAttributes.tsx), so this drawer is the only playable
+// copy on the page again, just reskinned as a slide-out instead of a
+// plain inline widget.
+//
+// Dark/blurred pill rather than the app's usual dol-blue styling - this
 // sits on top of arbitrary image content (bgColor/donut/subject all vary
 // per performance), so it needs to read against anything, not match one
 // particular theme color.
+const controlHeightClassName = "h-12";
+
 const badgeClassName = twMerge(
-  "flex items-center justify-center w-[72px] h-[72px] rounded-full",
-  "bg-dol-dark/60 backdrop-blur-sm border border-dol-light/20 shadow-md"
+  "flex items-center justify-center w-12 rounded-full shrink-0",
+  controlHeightClassName,
+  "backdrop-blur-sm border border-dol-light/20 shadow-md"
+);
+
+const drawerAudioClassName = twMerge(
+  "w-full h-full",
+  getTwDolColor("light", TwColorClassPrefix.Text),
+  getTwDolColor("dark", TwColorClassPrefix.Background, 50, "[&::-webkit-media-controls-panel]")
 );
 
 export const PerformanceAudioPlayer = ({
@@ -31,14 +49,14 @@ export const PerformanceAudioPlayer = ({
   loading,
   className,
 }: PerformanceAudioPlayerProps): React.ReactNode => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const drawerId = useId();
 
   // Covers navigating to a different performance (prev/next song) while
   // this component stays mounted under the same route shell - without
-  // this the button could keep showing "playing" for audio that's gone.
+  // this the drawer could stay open showing controls for audio that's gone.
   useEffect(() => {
-    setIsPlaying(false);
+    setIsOpen(false);
   }, [src]);
 
   if (loading) {
@@ -53,44 +71,52 @@ export const PerformanceAudioPlayer = ({
     return null;
   }
 
-  const handleToggle = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      audio.play();
-    } else {
-      audio.pause();
-    }
-  };
-
+  // Width comes from the parent via `className` (e.g. `left-4 right-4`
+  // insets), not from us - no negative offsets, no calc().
   return (
-    <>
+    <div className={twMerge("flex items-center gap-2", className)}>
       <button
         type="button"
-        onClick={handleToggle}
-        aria-label={isPlaying ? "Pause" : "Play"}
-        aria-pressed={isPlaying}
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-controls={drawerId}
+        aria-label={isOpen ? "Hide audio controls" : "Show audio controls"}
         className={twMerge(
           badgeClassName,
           "text-dol-light hover:brightness-125 transition duration-300 ease-in-out",
-          className
+          isOpen ? "bg-dol-dark/75" : "bg-dol-dark/60",
         )}
       >
-        {isPlaying
-          ? <FaPause size={26} />
-          : <FaPlay size={26} className="ml-1" />}
+        <FaMusic size={18} />
       </button>
-      {/* preload="none": most visitors never hit play, so don't fetch the
-          mp3 until they ask for it. */}
-      <audio
-        ref={audioRef}
-        src={src}
-        preload="none"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
-        className="hidden"
-      />
-    </>
+      {/* basis-0 + transition-[flex-grow]: animates the drawer's width
+          without a hardcoded pixel target, since the available space
+          depends on the image's responsive width. */}
+      <div
+        id={drawerId}
+        inert={!isOpen}
+        className={twMerge(
+          "flex items-center basis-0 overflow-hidden rounded-full transition-[flex-grow] duration-300 ease-in-out",
+          isOpen ? "grow" : "grow-0"
+        )}
+      >
+        <div
+          className={twMerge(
+            "flex items-center w-full rounded-full backdrop-blur-sm border border-dol-light/20 shadow-md",
+            controlHeightClassName
+          )}
+        >
+          {/* preload="none": most visitors never hit play, so don't fetch
+              the mp3 until they ask for it. */}
+          <audio
+            src={src}
+            controls
+            preload="none"
+            style={{ colorScheme: "dark" }}
+            className={drawerAudioClassName}
+          />
+        </div>
+      </div>
+    </div>
   );
 };
