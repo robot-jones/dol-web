@@ -1,29 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PerformanceAudioPlayer } from "./PerformanceAudioPlayer";
 
-// jsdom doesn't implement real media playback, and its `paused` getter is
-// hardwired to always return true - stub both play/pause and `paused`
-// itself (backed by a real per-instance flag) so the component's own
-// `audio.paused` check behaves like a real browser's.
-beforeAll(() => {
-  const pausedState = new WeakMap<HTMLMediaElement, boolean>();
-  Object.defineProperty(window.HTMLMediaElement.prototype, "paused", {
-    configurable: true,
-    get(this: HTMLMediaElement) {
-      return pausedState.get(this) ?? true;
-    },
-  });
-  window.HTMLMediaElement.prototype.play = function () {
-    pausedState.set(this, false);
-    this.dispatchEvent(new Event("play"));
-    return Promise.resolve();
-  };
-  window.HTMLMediaElement.prototype.pause = function () {
-    pausedState.set(this, true);
-    this.dispatchEvent(new Event("pause"));
-  };
-});
-
 describe("PerformanceAudioPlayer", () => {
   it("renders nothing while there's no mp3 to play", () => {
     const { container } = render(<PerformanceAudioPlayer />);
@@ -35,30 +12,51 @@ describe("PerformanceAudioPlayer", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("toggles play/pause on click, unmuted, without looping or autoplaying", () => {
+  it("renders a closed, inert drawer without autoplaying, looping, or muting", () => {
     render(<PerformanceAudioPlayer src="https://phish.in/audio/track.mp3" />);
 
     const audio = document.querySelector("audio") as HTMLAudioElement;
+    expect(audio).toHaveAttribute("controls");
     expect(audio).not.toHaveAttribute("autoplay");
     expect(audio).not.toHaveAttribute("loop");
     expect(audio.muted).toBe(false);
 
-    const button = screen.getByRole("button", { name: "Play" });
-    fireEvent.click(button);
-    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Show audio controls" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(audio.closest("[inert]")).not.toBeNull();
   });
 
-  it("resets to a paused/play state when the src changes out from under it", () => {
+  it("toggles the drawer open/closed without touching playback", () => {
+    render(<PerformanceAudioPlayer src="https://phish.in/audio/track.mp3" />);
+
+    const audio = document.querySelector("audio") as HTMLAudioElement;
+    const playSpy = vi.spyOn(audio, "play");
+
+    const button = screen.getByRole("button", { name: "Show audio controls" });
+    fireEvent.click(button);
+
+    expect(screen.getByRole("button", { name: "Hide audio controls" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(audio.closest("[inert]")).toBeNull();
+    expect(playSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide audio controls" }));
+    expect(screen.getByRole("button", { name: "Show audio controls" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+  });
+
+  it("closes the drawer when the src changes out from under it", () => {
     const { rerender } = render(
       <PerformanceAudioPlayer src="https://phish.in/audio/track-1.mp3" />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Play" }));
-    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show audio controls" }));
+    expect(screen.getByRole("button", { name: "Hide audio controls" })).toBeInTheDocument();
 
     rerender(<PerformanceAudioPlayer src="https://phish.in/audio/track-2.mp3" />);
-    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show audio controls" })).toBeInTheDocument();
   });
 });
