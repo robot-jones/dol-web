@@ -202,15 +202,6 @@ export const CustomizableAttributes = ({
           attributeColor={"yellow"}
         />
         <DataAttribute label="Subject" data={subjectLabel} attributeColor={"yellow"} />
-        {inscription && (
-          <DataAttribute
-            label="Inscription"
-            data={inscription}
-            attributeColor={"yellow"}
-            fullWidth
-            wrap
-          />
-        )}
       </div>
     );
   }

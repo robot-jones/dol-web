@@ -93,30 +93,9 @@ describe("CustomizableAttributes once minted", () => {
     expect(screen.getByText("--null--")).toBeInTheDocument();
   });
 
-  it("shows the inscription when one was set", () => {
-    render(
-      <CustomizableAttributes
-        {...baseProps}
-        minted
-        inscription="for jenny"
-        handleRandomizeClick={vi.fn()}
-        handleRandomizeKeyDown={vi.fn()}
-      />
-    );
-    expect(screen.getByText("for jenny")).toBeInTheDocument();
-  });
-
-  it("omits the inscription tile entirely when none was set - not another --null--", () => {
-    render(
-      <CustomizableAttributes
-        {...baseProps}
-        minted
-        handleRandomizeClick={vi.fn()}
-        handleRandomizeKeyDown={vi.fn()}
-      />
-    );
-    expect(screen.queryByText("Inscription")).not.toBeInTheDocument();
-  });
+  // Minted inscription display moved to PerformanceInscription (a caption
+  // under the image, not a Details-panel tile) - this component no longer
+  // renders it at all once minted, so there's nothing left to assert here.
 });
 
 describe("CustomizableAttributes inscription input", () => {

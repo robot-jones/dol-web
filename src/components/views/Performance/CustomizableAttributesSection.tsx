@@ -1,14 +1,14 @@
 import { CustomizableAttributes, CustomizableAttributesProps, SectionHeader } from "@/components/views/Performance/AttributeSections";
 
 export type CustomizableAttributesSectionProps = CustomizableAttributesProps & {
-  show: boolean;
+  isShown: boolean;
 };
 
 export const CustomizableAttributesSection = ({
-  show,
+  isShown,
   ...customizableAttributesProps
 }: CustomizableAttributesSectionProps): React.ReactNode => {
-  if (!show) return null;
+  if (!isShown) return null;
   return (
     <>
       <SectionHeader text="Customizable NFT Attributes" />
