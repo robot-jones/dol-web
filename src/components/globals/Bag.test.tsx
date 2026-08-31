@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { act, render, screen, fireEvent, within, waitFor } from "@testing-library/react";
-import { DolColorHex, PerformanceAttributes } from "@erikmuir/dol-lib/types";
 import { CartContextProvider, CartItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
 import { fetchStandardJson } from "@/utils";
@@ -94,6 +93,9 @@ const SeedItems = ({ items }: { items: CartItem[] }) => {
       cart.addPendingItem(item.showDate, item.position, item.song);
       if (item.status === "ready") {
         cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt, item.attributes);
+        if (item.updatingSince) {
+          cart.startUpdatingItem(item.showDate, item.position);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,26 +117,6 @@ const RequestsBagOpen = () => {
   const cart = useCart();
   useEffect(() => {
     cart.requestBagOpen();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-};
-
-// Simulates MintAction.tsx's draft-sync effect landing a live edit for a
-// given item - same public API (cart.setDraftAttributes), not reaching
-// into context internals.
-const SeedDraft = ({
-  showDate,
-  position,
-  attributes,
-}: {
-  showDate: string;
-  position: number;
-  attributes: PerformanceAttributes;
-}) => {
-  const cart = useCart();
-  useEffect(() => {
-    cart.setDraftAttributes(showDate, position, attributes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
@@ -291,92 +273,41 @@ describe("Bag", () => {
     expect(fetchStandardJson).not.toHaveBeenCalled();
   });
 
-  // "Update Bag Item" (CART.md): the refresh icon only appears once a live
-  // draft (synced in from MintAction.tsx while that item's performance
-  // page is open) actually differs from what's already published.
-  describe("Update Bag Item", () => {
-    const renderWithDraft = (attributes: PerformanceAttributes, published: PerformanceAttributes) =>
-      render(
-        <CartContextProvider>
-          <SeedItems items={[{ ...item1, attributes: published }]} />
-          <SeedDraft showDate={item1.showDate} position={item1.position} attributes={attributes} />
-          <Bag />
-        </CartContextProvider>
-      );
-
-    it("shows no refresh icon when there's no live draft for the item", () => {
-      render(<Seeded items={[item1]} />);
+  // Erik's UX rework: the actual "push the update" click lives on the
+  // performance page now (MintAction.tsx's "Update Attributes" pill) - the
+  // Bag's job is purely to show it happening (same progress treatment as a
+  // still-pending add) and to keep Checkout disabled meanwhile.
+  describe("an item being updated", () => {
+    it("shows progress text instead of a Locked-for note while updating", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }]} />);
       fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
-      expect(screen.queryByRole("button", { name: `Update ${item1.song}` })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Locked for/)).not.toBeInTheDocument();
+      // UPDATE_PROGRESS_STEPS[0] - same wording as CLAIM_PROGRESS_STEPS'
+      // second step, since nothing is being (re-)claimed here.
+      expect(screen.getByText("Rendering your NFT image...")).toBeInTheDocument();
     });
 
-    it("shows no refresh icon when the live draft matches what's already published", () => {
-      renderWithDraft({ bgColor: DolColorHex.Dark }, { bgColor: DolColorHex.Dark });
+    it("still offers Remove while updating", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }]} />);
       fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
-      expect(screen.queryByRole("button", { name: `Update ${item1.song}` })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
     });
 
-    it("shows the refresh icon once the live draft actually differs from what's published", () => {
-      renderWithDraft({ bgColor: DolColorHex.Light }, { bgColor: DolColorHex.Dark });
+    it("disables Checkout while any item is updating, even if others are ready", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }, item2]} />);
       fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
-      expect(screen.getByRole("button", { name: `Update ${item1.song}` })).toBeInTheDocument();
+      const checkoutButton = screen.getByRole("button", { name: "Waiting for items…" });
+      expect(checkoutButton).toBeDisabled();
     });
 
-    it("pushes the live draft to the update route on click, and clears the icon on success", async () => {
-      vi.mocked(fetchStandardJson).mockResolvedValue({ success: true });
-      renderWithDraft({ bgColor: DolColorHex.Light }, { bgColor: DolColorHex.Dark });
+    it("re-enables Checkout once the update finishes", () => {
+      render(<Seeded items={[item1, item2]} />);
       fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
 
-      fireEvent.click(screen.getByRole("button", { name: `Update ${item1.song}` }));
-
-      await waitFor(() =>
-        expect(fetchStandardJson).toHaveBeenCalledWith(
-          `/api/mint/0.0.1/${item1.showDate}/${item1.position}/update`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bgColor: DolColorHex.Light }),
-          }
-        )
-      );
-      await waitFor(() =>
-        expect(screen.queryByRole("button", { name: `Update ${item1.song}` })).not.toBeInTheDocument()
-      );
-    });
-
-    it("shows a failure notice and keeps the icon when the server reports it couldn't update", async () => {
-      vi.mocked(fetchStandardJson).mockResolvedValue({ success: false, reason: "NOT_LOCKED" });
-      renderWithDraft({ bgColor: DolColorHex.Light }, { bgColor: DolColorHex.Dark });
-      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
-
-      fireEvent.click(screen.getByRole("button", { name: `Update ${item1.song}` }));
-
-      await waitFor(() => expect(screen.getByText(/Failed to update/)).toBeInTheDocument());
-      expect(screen.getByRole("button", { name: `Update ${item1.song}` })).toBeInTheDocument();
-    });
-
-    it("shows a failure notice when the update request itself throws", async () => {
-      vi.mocked(fetchStandardJson).mockRejectedValue(new Error("network error"));
-      renderWithDraft({ bgColor: DolColorHex.Light }, { bgColor: DolColorHex.Dark });
-      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
-
-      fireEvent.click(screen.getByRole("button", { name: `Update ${item1.song}` }));
-
-      await waitFor(() => expect(screen.getByText(/Failed to update/)).toBeInTheDocument());
-      expect(screen.getByRole("button", { name: `Update ${item1.song}` })).toBeInTheDocument();
-    });
-
-    it("does nothing with no wallet connected - no draft to attribute an accountId-less request to", () => {
-      useWalletInterfaceMock.mockReturnValue({ accountId: null, walletInterface: null });
-      renderWithDraft({ bgColor: DolColorHex.Light }, { bgColor: DolColorHex.Dark });
-      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
-
-      fireEvent.click(screen.getByRole("button", { name: `Update ${item1.song}` }));
-
-      expect(fetchStandardJson).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Checkout" })).not.toBeDisabled();
     });
   });
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CollectionMintStatus, PerformanceAttributes } from "@erikmuir/dol-lib/types";
-import { addToBag, MAX_CART_ITEMS } from "@/cart";
+import { addToBag, CUSTOMIZABLE_ATTRIBUTE_KEYS, MAX_CART_ITEMS, updateBagItem } from "@/cart";
 import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
 import { DolButton } from "@/components/common/DolButton";
 import { Modal } from "@/components/globals/Modal";
@@ -104,6 +104,20 @@ export const MintAction = ({
   const isConnected = Boolean(accountId);
   const maxCartItems = collectionMintStatus === CollectionMintStatus.PRE_SALE ? 1 : MAX_CART_ITEMS;
 
+  // "Update Attributes": true once this page's live picker state actually
+  // differs from what's published for this bag item, on at least one of
+  // the customizable fields (not the full PerformanceAttributes object -
+  // song/venue/mp3/etc. are derived from the performance itself and can't
+  // diverge). False while an update is already in flight, so clicking
+  // doesn't re-offer itself mid-request - and, since startUpdatingItem
+  // fires synchronously, the button flips back to "In Your Bag" the
+  // instant it's clicked rather than staying "Update Attributes" until the
+  // request resolves.
+  const canUpdateAttributes =
+    bagEntry?.status === "ready" &&
+    !bagEntry.updatingSince &&
+    CUSTOMIZABLE_ATTRIBUTE_KEYS.some((key) => attributes[key] !== bagEntry.attributes?.[key]);
+
   // Ticks `now` while this performance is locked (by anyone) or in this
   // account's own bag, so the elapsed-time note stays live without
   // needing a network refetch - lockedAt is a fixed timestamp, only "now"
@@ -120,27 +134,6 @@ export const MintAction = ({
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [lockedBy, bagEntry]);
-
-  // "Update Bag Item" (CART.md): mirrors this page's live attribute edits
-  // into the cart's draft store while this item sits "ready" in the bag,
-  // so the Bag's refresh icon has something to push. Deliberately narrow -
-  // only syncs, never itself decides whether anything's actually dirty
-  // (Bag.tsx does that, comparing against the item's own published
-  // attributes) or calls the server. `bagEntry` stays referentially stable
-  // across renders that don't touch cart.items (see cart/context.tsx's
-  // itemsRef), so this doesn't re-fire on every unrelated cart update.
-  // cart.setDraftAttributes deliberately isn't in the dependency array -
-  // it's a plain closure recreated every CartContextProvider render (not a
-  // useState setter), so depending on it would re-fire this effect on
-  // every cart change of any kind, including the one this effect itself
-  // causes - an infinite loop. Safe to omit: it only ever does a
-  // functional setState update, so it never needs a "fresh" closure.
-  useEffect(() => {
-    if (bagEntry?.status === "ready") {
-      cart.setDraftAttributes(showDate, position, attributes);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bagEntry, attributes, showDate, position]);
 
   // Bug reported live on preview (2026-08-27): this used to be
   // fire-and-forget, so a failed connect attempt (e.g. the wallet's relay
@@ -262,6 +255,19 @@ export const MintAction = ({
     }
   };
 
+  // "Update Attributes": pushes whatever's currently showing on this page
+  // for an already-claimed bag item, without re-claiming it (so the lock
+  // timer is untouched) - opens the Bag the same way Add to Bag does, so
+  // the buyer sees the in-flight progress text land there rather than on
+  // a page they might navigate away from.
+  const handleUpdateAttributesClick = () => {
+    if (!accountId || !canUpdateAttributes) {
+      return;
+    }
+    cart.requestBagOpen();
+    updateBagItem(cart, accountId, showDate, position, attributes);
+  };
+
   const getAction = (): Action => {
     // Loading
     if (appConfigStatusLoading || performanceLoading || isAssociatedLoading || accountStatusLoading) {
@@ -308,15 +314,26 @@ export const MintAction = ({
 
     // In the bag
     if (bagEntry) {
-      return {
-        color: "yellow",
-        label: "In Your Bag",
-        extra: bagEntry.status === "ready" ? (
-          <div className="flex flex-col items-center">
-            <LockedForNote lockedAt={bagEntry.lockedAt} now={now} />
-          </div>
-        ) : null,
-      };
+      const lockedForNote = bagEntry.status === "ready" ? (
+        <div className="flex flex-col items-center">
+          <LockedForNote lockedAt={bagEntry.lockedAt} now={now} />
+        </div>
+      ) : null;
+
+      // Reenables as an actual action once this page's edits have actually
+      // diverged from what's published - clicking it re-publishes and
+      // opens the Bag, where the "still updating" progress text and a
+      // disabled Checkout explain what's happening (Erik's call).
+      if (canUpdateAttributes) {
+        return {
+          color: "green",
+          label: "Update Attributes",
+          onClick: handleUpdateAttributesClick,
+          extra: lockedForNote,
+        };
+      }
+
+      return { color: "yellow", label: "In Your Bag", extra: lockedForNote };
     }
 
     // Locked
