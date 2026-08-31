@@ -46,13 +46,6 @@ vi.mock("@/utils", async (importOriginal) => ({
   fetchJson: (...args: unknown[]) => fetchJsonMock(...args),
 }));
 
-// purchaseNfts/purchaseNft both `await sleep(1000)` before signing - real
-// enough to matter live, but no reason to make every test wait a second.
-vi.mock("@erikmuir/dol-lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@erikmuir/dol-lib/utils")>()),
-  sleep: vi.fn(async () => {}),
-}));
-
 // TokenAssociateTransaction is a real @hashgraph/sdk transaction builder -
 // its freeze/execute calls expect a real protocol-level Signer, which the
 // fake signers above don't implement. Everything else from @hashgraph/sdk
@@ -86,16 +79,19 @@ const fakeSigner = (accountId: string) => ({
   getAccountId: () => ({ toString: () => accountId }),
 });
 
-// purchaseNfts/purchaseNft take an already-frozen Transaction, not
-// something they build themselves - a plain signWithSigner/executeWithSigner
-// stub is enough, no need to fake the whole Transaction class.
-const makeSignedTx = (receiptStatus = "SUCCESS") => {
+// purchaseNfts takes an already-frozen Transaction, not something it
+// builds itself - a plain executeWithSigner stub is enough, no need to
+// fake the whole Transaction class. Deliberately no signWithSigner here:
+// purchaseNfts calls executeWithSigner() directly (it signs and submits
+// in one wallet round-trip - see client.ts) rather than signing first,
+// so a stub offering signWithSigner would silently stop covering the
+// real call path.
+const makeTx = (receiptStatus = "SUCCESS") => {
   const txResult = {
     transactionId: { toString: () => "0.0.1@1700000000.000000002" },
     getReceiptWithSigner: vi.fn(async () => ({ status: { toString: () => receiptStatus } })),
   };
-  const signedTx = { executeWithSigner: vi.fn(async () => txResult) };
-  return { signWithSigner: vi.fn(async () => signedTx) };
+  return { executeWithSigner: vi.fn(async () => txResult) };
 };
 
 describe("WalletConnectWallet", () => {
@@ -151,7 +147,7 @@ describe("WalletConnectWallet", () => {
 
     it("signs, executes, and audits one NFT_PURCHASE entry per item on success", async () => {
       signers.push(fakeSigner("0.0.1234"));
-      const tx = makeSignedTx("SUCCESS");
+      const tx = makeTx("SUCCESS");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const success = await walletConnectWallet.purchaseNfts(tx as any, items);
@@ -170,7 +166,7 @@ describe("WalletConnectWallet", () => {
 
     it("returns false and still audits every item as failed when the receipt isn't SUCCESS", async () => {
       signers.push(fakeSigner("0.0.1234"));
-      const tx = makeSignedTx("FAIL");
+      const tx = makeTx("FAIL");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const success = await walletConnectWallet.purchaseNfts(tx as any, items);
@@ -183,10 +179,10 @@ describe("WalletConnectWallet", () => {
       );
     });
 
-    it("returns false and still audits every item when signing throws", async () => {
+    it("returns false and still audits every item when the wallet round-trip throws", async () => {
       signers.push(fakeSigner("0.0.1234"));
       const tx = {
-        signWithSigner: vi.fn(async () => {
+        executeWithSigner: vi.fn(async () => {
           throw new Error("wallet rejected");
         }),
       };
@@ -202,7 +198,7 @@ describe("WalletConnectWallet", () => {
     // so every item's audit entry should agree on the same transactionId.
     it("shares one transactionId across every item's audit entry", async () => {
       signers.push(fakeSigner("0.0.1234"));
-      const tx = makeSignedTx("SUCCESS");
+      const tx = makeTx("SUCCESS");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await walletConnectWallet.purchaseNfts(tx as any, items);
@@ -221,7 +217,7 @@ describe("WalletConnectWallet", () => {
     // audit entry is written either - there's no accountId to attribute
     // it to.
     it("resolves false, without throwing, when no wallet is connected", async () => {
-      const tx = makeSignedTx("SUCCESS");
+      const tx = makeTx("SUCCESS");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const success = await walletConnectWallet.purchaseNfts(tx as any, items);
 
