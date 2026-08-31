@@ -4,7 +4,13 @@ import type { ServerPrepareResponse } from "@/app/api/mint/[accountId]/[showDate
 
 export type AddToBagCartApi = {
   addPendingItem: (showDate: string, position: number, song: string) => boolean;
-  resolvePendingItem: (showDate: string, position: number, serial: number, lockedAt?: number) => void;
+  resolvePendingItem: (
+    showDate: string,
+    position: number,
+    serial: number,
+    lockedAt?: number,
+    attributes?: PerformanceAttributes
+  ) => void;
   failPendingItem: (showDate: string, position: number, message: string) => void;
 };
 
@@ -104,5 +110,5 @@ export const addToBag = async (
     return;
   }
 
-  cartApi.resolvePendingItem(showDate, position, serial, lockedAt);
+  cartApi.resolvePendingItem(showDate, position, serial, lockedAt, attributes);
 };

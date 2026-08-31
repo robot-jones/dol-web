@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CollectionMintStatus, PerformanceAttributes } from "@erikmuir/dol-lib/types";
-import { addToBag, MAX_CART_ITEMS } from "@/cart";
+import { addToBag, CUSTOMIZABLE_ATTRIBUTE_KEYS, MAX_CART_ITEMS, updateBagItem } from "@/cart";
 import { MintActionColor, MintActionPill } from "@/components/common/MintActionPill";
 import { DolButton } from "@/components/common/DolButton";
 import { Modal } from "@/components/globals/Modal";
@@ -103,6 +103,20 @@ export const MintAction = ({
   const bagEntry = bagItems.find((i) => i.showDate === showDate && i.position === position);
   const isConnected = Boolean(accountId);
   const maxCartItems = collectionMintStatus === CollectionMintStatus.PRE_SALE ? 1 : MAX_CART_ITEMS;
+
+  // "Update Attributes": true once this page's live picker state actually
+  // differs from what's published for this bag item, on at least one of
+  // the customizable fields (not the full PerformanceAttributes object -
+  // song/venue/mp3/etc. are derived from the performance itself and can't
+  // diverge). False while an update is already in flight, so clicking
+  // doesn't re-offer itself mid-request - and, since startUpdatingItem
+  // fires synchronously, the button flips back to "In Your Bag" the
+  // instant it's clicked rather than staying "Update Attributes" until the
+  // request resolves.
+  const canUpdateAttributes =
+    bagEntry?.status === "ready" &&
+    !bagEntry.updatingSince &&
+    CUSTOMIZABLE_ATTRIBUTE_KEYS.some((key) => attributes[key] !== bagEntry.attributes?.[key]);
 
   // Ticks `now` while this performance is locked (by anyone) or in this
   // account's own bag, so the elapsed-time note stays live without
@@ -241,6 +255,19 @@ export const MintAction = ({
     }
   };
 
+  // "Update Attributes": pushes whatever's currently showing on this page
+  // for an already-claimed bag item, without re-claiming it (so the lock
+  // timer is untouched) - opens the Bag the same way Add to Bag does, so
+  // the buyer sees the in-flight progress text land there rather than on
+  // a page they might navigate away from.
+  const handleUpdateAttributesClick = () => {
+    if (!accountId || !canUpdateAttributes) {
+      return;
+    }
+    cart.requestBagOpen();
+    updateBagItem(cart, accountId, showDate, position, attributes);
+  };
+
   const getAction = (): Action => {
     // Loading
     if (appConfigStatusLoading || performanceLoading || isAssociatedLoading || accountStatusLoading) {
@@ -287,15 +314,26 @@ export const MintAction = ({
 
     // In the bag
     if (bagEntry) {
-      return {
-        color: "yellow",
-        label: "In Your Bag",
-        extra: bagEntry.status === "ready" ? (
-          <div className="flex flex-col items-center">
-            <LockedForNote lockedAt={bagEntry.lockedAt} now={now} />
-          </div>
-        ) : null,
-      };
+      const lockedForNote = bagEntry.status === "ready" ? (
+        <div className="flex flex-col items-center">
+          <LockedForNote lockedAt={bagEntry.lockedAt} now={now} />
+        </div>
+      ) : null;
+
+      // Reenables as an actual action once this page's edits have actually
+      // diverged from what's published - clicking it re-publishes and
+      // opens the Bag, where the "still updating" progress text and a
+      // disabled Checkout explain what's happening (Erik's call).
+      if (canUpdateAttributes) {
+        return {
+          color: "green",
+          label: "Update Attributes",
+          onClick: handleUpdateAttributesClick,
+          extra: lockedForNote,
+        };
+      }
+
+      return { color: "yellow", label: "In Your Bag", extra: lockedForNote };
     }
 
     // Locked

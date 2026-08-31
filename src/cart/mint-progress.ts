@@ -16,12 +16,24 @@ export const CLAIM_PROGRESS_STEPS = [
 
 export const CLAIM_PROGRESS_STEP_INTERVAL_MS = 4000;
 
+// "Update Attributes" (CART.md) reuses the same claim -> render -> upload
+// -> finalize progress display for an already-claimed item's re-publish -
+// minus the first step, since nothing is being (re-)claimed. Sliced rather
+// than duplicated so the wording stays in sync automatically.
+export const UPDATE_PROGRESS_STEPS = CLAIM_PROGRESS_STEPS.slice(1);
+
 // Derives which step a pending item's progress display should show, from
 // how long it's been pending - the Bag view already has a ticking clock
 // (`now`) for LockedForNote-style timers, so this reuses that instead of
-// a second per-item interval/mutation.
-export const getProgressStepIndex = (addedAt: number, now: number): number => {
+// a second per-item interval/mutation. `stepCount` defaults to
+// CLAIM_PROGRESS_STEPS's own length; pass UPDATE_PROGRESS_STEPS.length for
+// an in-flight update instead.
+export const getProgressStepIndex = (
+  addedAt: number,
+  now: number,
+  stepCount: number = CLAIM_PROGRESS_STEPS.length
+): number => {
   const elapsed = Math.max(0, now - addedAt);
   const step = Math.floor(elapsed / CLAIM_PROGRESS_STEP_INTERVAL_MS);
-  return Math.min(step, CLAIM_PROGRESS_STEPS.length - 1);
+  return Math.min(step, stepCount - 1);
 };

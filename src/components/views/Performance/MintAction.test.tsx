@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { CollectionMintStatus } from "@erikmuir/dol-lib/types";
-import { CartContextProvider, addToBag } from "@/cart";
+import { CollectionMintStatus, PerformanceAttributes } from "@erikmuir/dol-lib/types";
+import { CartContextProvider, addToBag, updateBagItem } from "@/cart";
 import { useCart } from "@/hooks/use-cart";
 import { fetchStandardJson } from "@/utils";
 import { openWalletConnectModal } from "@/wallet";
@@ -20,14 +20,16 @@ vi.mock("@/wallet", () => ({
   openWalletConnectModal: vi.fn(),
 }));
 
-// addToBag itself is covered by its own concerns elsewhere - here it's
-// mocked out so these tests are only about what MintAction decides to
-// call it with, not what it does once called. CartContextProvider stays
-// real so bag-membership branches (pending/ready/full) can be driven
-// through the same public API Bag.test.tsx uses.
+// addToBag/updateBagItem are covered by their own concerns elsewhere -
+// here they're mocked out so these tests are only about what MintAction
+// decides to call them with, not what they do once called.
+// CartContextProvider stays real so bag-membership branches (pending/
+// ready/full, dirty/updating) can be driven through the same public API
+// Bag.test.tsx uses.
 vi.mock("@/cart", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/cart")>()),
   addToBag: vi.fn(),
+  updateBagItem: vi.fn(),
 }));
 
 vi.mock("@/utils", async (importOriginal) => ({
@@ -58,17 +60,26 @@ const baseProps: MintActionProps = {
 // Seeds cart state via the same public API the real "Add to Bag" button
 // uses (see Bag.test.tsx) - not addToBag itself, since that's mocked out
 // above.
-const SeedItems = ({
-  items,
-}: {
-  items: { showDate: string; position: number; song: string; serial?: number; lockedAt?: number }[];
-}) => {
+type SeedItem = {
+  showDate: string;
+  position: number;
+  song: string;
+  serial?: number;
+  lockedAt?: number;
+  attributes?: PerformanceAttributes;
+  updatingSince?: number;
+};
+
+const SeedItems = ({ items }: { items: SeedItem[] }) => {
   const cart = useCart();
   useEffect(() => {
     items.forEach((item) => {
       cart.addPendingItem(item.showDate, item.position, item.song);
       if (item.serial) {
-        cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt);
+        cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt, item.attributes);
+        if (item.updatingSince) {
+          cart.startUpdatingItem(item.showDate, item.position);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,7 +96,7 @@ const BagOpenRequestCounter = () => {
 
 const renderMintAction = (
   props: Partial<MintActionProps> = {},
-  seedItems: { showDate: string; position: number; song: string; serial?: number; lockedAt?: number }[] = []
+  seedItems: SeedItem[] = []
 ) =>
   render(
     <CartContextProvider>
@@ -104,6 +115,7 @@ beforeEach(() => {
     mutateIsAssociated: vi.fn(),
   });
   vi.mocked(addToBag).mockReset().mockResolvedValue(undefined);
+  vi.mocked(updateBagItem).mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchStandardJson).mockReset().mockResolvedValue(undefined);
   vi.mocked(openWalletConnectModal).mockReset().mockResolvedValue(undefined);
   const modalRoot = document.createElement("div");
@@ -239,6 +251,80 @@ describe("MintAction", () => {
       ]);
       expect(screen.getByText("In Your Bag")).toBeInTheDocument();
       expect(screen.getByText(/Locked for/)).toBeInTheDocument();
+    });
+  });
+
+  // Erik's UX rework: the pill itself reenables as "Update Attributes"
+  // once this page's edits actually diverge from what's published for a
+  // ready bag item, rather than a separate icon living in the Bag drawer.
+  describe("Update Attributes", () => {
+    const readyItem = (overrides: Partial<SeedItem> = {}): SeedItem => ({
+      showDate: "1998-07-29",
+      position: 1,
+      song: "Wilson",
+      serial: 7,
+      lockedAt: Date.now(),
+      attributes: { song: "Wilson", bgColor: "#000000" } as never,
+      ...overrides,
+    });
+
+    it("stays 'In Your Bag' when the live attributes match what's published", () => {
+      renderMintAction(
+        { attributes: { song: "Wilson", bgColor: "#000000" } as never },
+        [readyItem()]
+      );
+      expect(screen.getByText("In Your Bag")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Update Attributes" })).not.toBeInTheDocument();
+    });
+
+    it("reenables as 'Update Attributes' once the live attributes diverge", () => {
+      renderMintAction(
+        { attributes: { song: "Wilson", bgColor: "#ffffff" } as never },
+        [readyItem()]
+      );
+      expect(screen.getByRole("button", { name: "Update Attributes" })).toBeInTheDocument();
+      expect(screen.queryByText("In Your Bag")).not.toBeInTheDocument();
+      // The lock timer keeps showing regardless - updating never touches it.
+      expect(screen.getByText(/Locked for/)).toBeInTheDocument();
+    });
+
+    it("stays 'In Your Bag' (not an action) while the item is still pending, even with divergent attributes", () => {
+      renderMintAction(
+        { attributes: { song: "Wilson", bgColor: "#ffffff" } as never },
+        [{ showDate: "1998-07-29", position: 1, song: "Wilson" }]
+      );
+      expect(screen.getByText("In Your Bag")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Update Attributes" })).not.toBeInTheDocument();
+    });
+
+    it("stays 'In Your Bag' while an update is already in flight, even with divergent attributes", () => {
+      renderMintAction(
+        { attributes: { song: "Wilson", bgColor: "#ffffff" } as never },
+        [readyItem({ updatingSince: Date.now() })]
+      );
+      expect(screen.getByText("In Your Bag")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Update Attributes" })).not.toBeInTheDocument();
+    });
+
+    it("clicking opens the Bag and calls updateBagItem with the live attributes", () => {
+      render(
+        <CartContextProvider>
+          <SeedItems items={[readyItem()]} />
+          <BagOpenRequestCounter />
+          <MintAction {...baseProps} attributes={{ song: "Wilson", bgColor: "#ffffff" } as never} />
+        </CartContextProvider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Update Attributes" }));
+
+      expect(screen.getByTestId("bag-open-request-count")).toHaveTextContent("1");
+      expect(updateBagItem).toHaveBeenCalledWith(
+        expect.anything(),
+        "0.0.1",
+        "1998-07-29",
+        1,
+        { song: "Wilson", bgColor: "#ffffff" }
+      );
     });
   });
 

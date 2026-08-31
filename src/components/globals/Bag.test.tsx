@@ -92,7 +92,10 @@ const SeedItems = ({ items }: { items: CartItem[] }) => {
     items.forEach((item) => {
       cart.addPendingItem(item.showDate, item.position, item.song);
       if (item.status === "ready") {
-        cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt);
+        cart.resolvePendingItem(item.showDate, item.position, item.serial, item.lockedAt, item.attributes);
+        if (item.updatingSince) {
+          cart.startUpdatingItem(item.showDate, item.position);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,6 +271,44 @@ describe("Bag", () => {
 
     expect(screen.queryByText("Runaway Jim")).not.toBeInTheDocument();
     expect(fetchStandardJson).not.toHaveBeenCalled();
+  });
+
+  // Erik's UX rework: the actual "push the update" click lives on the
+  // performance page now (MintAction.tsx's "Update Attributes" pill) - the
+  // Bag's job is purely to show it happening (same progress treatment as a
+  // still-pending add) and to keep Checkout disabled meanwhile.
+  describe("an item being updated", () => {
+    it("shows progress text instead of a Locked-for note while updating", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.queryByText(/Locked for/)).not.toBeInTheDocument();
+      // UPDATE_PROGRESS_STEPS[0] - same wording as CLAIM_PROGRESS_STEPS'
+      // second step, since nothing is being (re-)claimed here.
+      expect(screen.getByText("Rendering your NFT image...")).toBeInTheDocument();
+    });
+
+    it("still offers Remove while updating", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    });
+
+    it("disables Checkout while any item is updating, even if others are ready", () => {
+      render(<Seeded items={[{ ...item1, updatingSince: Date.now() }, item2]} />);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      const checkoutButton = screen.getByRole("button", { name: "Waiting for items…" });
+      expect(checkoutButton).toBeDisabled();
+    });
+
+    it("re-enables Checkout once the update finishes", () => {
+      render(<Seeded items={[item1, item2]} />);
+      fireEvent.click(screen.getByRole("button", { name: "AC/DC Bag" }));
+
+      expect(screen.getByRole("button", { name: "Checkout" })).not.toBeDisabled();
+    });
   });
 
   describe("pending items", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useEffect, useRef, useState, ReactNode, Context } from "react";
+import { PerformanceAttributes } from "@erikmuir/dol-lib/types";
 import { CartItem, PendingCartItem, ReadyCartItem } from "./types";
 
 const STORAGE_KEY = "dol-cart";
@@ -25,8 +26,17 @@ export type CartContextValue = {
   addPendingItem: (showDate: string, position: number, song: string) => boolean;
   // Replaces a pending item with its resolved, ready form once prepare()
   // actually succeeds. No-op if the item isn't there (e.g. already
-  // removed) or isn't pending any more.
-  resolvePendingItem: (showDate: string, position: number, serial: number, lockedAt?: number) => void;
+  // removed) or isn't pending any more. `attributes` is what was actually
+  // sent to prepare() - stored as the item's dirty-check baseline for
+  // "Update Attributes" (MintAction.tsx compares its live picker state
+  // against this).
+  resolvePendingItem: (
+    showDate: string,
+    position: number,
+    serial: number,
+    lockedAt?: number,
+    attributes?: PerformanceAttributes
+  ) => void;
   // Drops a pending item that failed to prepare and records why, so the
   // bag can surface it if it's open. Deliberately not a persistent
   // per-item error row - see lastError below.
@@ -55,6 +65,18 @@ export type CartContextValue = {
   // that, so mounting doesn't itself count as a request.
   bagOpenRequestCount: number;
   requestBagOpen: () => void;
+  // "Update Attributes": marks a ready item as having an update request in
+  // flight (Date.now(), so the Bag can derive a progress step the same way
+  // it does for a still-pending add) - and the two ways that resolves.
+  // No-op if the item isn't there or isn't "ready" any more.
+  startUpdatingItem: (showDate: string, position: number) => void;
+  // Moves the pushed attributes into the item's own published snapshot
+  // (so MintAction.tsx's dirty-check goes false again) and clears
+  // updatingSince.
+  finishUpdatingItem: (showDate: string, position: number, attributes: PerformanceAttributes) => void;
+  // Clears updatingSince without touching the item's published attributes
+  // (nothing changed server-side either) and records why via lastError.
+  failUpdatingItem: (showDate: string, position: number, message: string) => void;
 };
 
 const defaultContext: CartContextValue = {
@@ -69,6 +91,9 @@ const defaultContext: CartContextValue = {
   expireReadyItem: () => {},
   bagOpenRequestCount: 0,
   requestBagOpen: () => {},
+  startUpdatingItem: () => {},
+  finishUpdatingItem: () => {},
+  failUpdatingItem: () => {},
 };
 
 export const CartContext: Context<CartContextValue> = createContext(defaultContext);
@@ -117,7 +142,15 @@ export const CartContextProvider = (props: {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed: CartItem[] = JSON.parse(stored);
-        const ready = parsed.filter((item): item is ReadyCartItem => item.status === "ready");
+        // A still-"updating" ready item means an update-attributes request
+        // was in flight when the tab closed or reloaded - same dead-promise
+        // situation as a dropped pending item below, but the item itself is
+        // still perfectly valid (its attributes are just whatever was last
+        // actually confirmed), so it's kept, only the stale flag is
+        // stripped - no lastError needed, nothing is actually wrong.
+        const ready = parsed
+          .filter((item): item is ReadyCartItem => item.status === "ready")
+          .map((item) => (item.updatingSince ? { ...item, updatingSince: undefined } : item));
         // A "pending" item means a prepare() call was in flight when the
         // tab closed or reloaded - that promise chain is gone with the old
         // page, nothing left to resolve it, and it would otherwise spin
@@ -166,7 +199,13 @@ export const CartContextProvider = (props: {
     return true;
   };
 
-  const resolvePendingItem = (showDate: string, position: number, serial: number, lockedAt?: number) => {
+  const resolvePendingItem = (
+    showDate: string,
+    position: number,
+    serial: number,
+    lockedAt?: number,
+    attributes?: PerformanceAttributes
+  ) => {
     const current = itemsRef.current;
     const index = findIndex(current, showDate, position);
     if (index === -1 || current[index].status !== "pending") return;
@@ -177,6 +216,7 @@ export const CartContextProvider = (props: {
       song: current[index].song,
       serial,
       lockedAt,
+      attributes,
     };
     const next = [...current];
     next[index] = ready;
@@ -211,6 +251,37 @@ export const CartContextProvider = (props: {
 
   const requestBagOpen = () => setBagOpenRequestCount((prev) => prev + 1);
 
+  const startUpdatingItem = (showDate: string, position: number) => {
+    const current = itemsRef.current;
+    const index = findIndex(current, showDate, position);
+    if (index !== -1 && current[index].status === "ready") {
+      const next = [...current];
+      next[index] = { ...(current[index] as ReadyCartItem), updatingSince: Date.now() };
+      setItems(next);
+    }
+  };
+
+  const finishUpdatingItem = (showDate: string, position: number, attributes: PerformanceAttributes) => {
+    const current = itemsRef.current;
+    const index = findIndex(current, showDate, position);
+    if (index !== -1 && current[index].status === "ready") {
+      const next = [...current];
+      next[index] = { ...(current[index] as ReadyCartItem), attributes, updatingSince: undefined };
+      setItems(next);
+    }
+  };
+
+  const failUpdatingItem = (showDate: string, position: number, message: string) => {
+    const current = itemsRef.current;
+    const index = findIndex(current, showDate, position);
+    if (index !== -1 && current[index].status === "ready") {
+      const next = [...current];
+      next[index] = { ...(current[index] as ReadyCartItem), updatingSince: undefined };
+      setItems(next);
+    }
+    setLastError(message);
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -225,6 +296,9 @@ export const CartContextProvider = (props: {
         expireReadyItem,
         bagOpenRequestCount,
         requestBagOpen,
+        startUpdatingItem,
+        finishUpdatingItem,
+        failUpdatingItem,
       }}
     >
       {props.children}

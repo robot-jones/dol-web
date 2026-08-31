@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
-import { CLAIM_PROGRESS_STEPS, getProgressStepIndex, ReadyCartItem } from "@/cart";
+import {
+  CLAIM_PROGRESS_STEPS,
+  getProgressStepIndex,
+  ReadyCartItem,
+  UPDATE_PROGRESS_STEPS,
+} from "@/cart";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { useAccountStatus } from "@/hooks/use-account-status";
 import { useCart } from "@/hooks/use-cart";
@@ -40,7 +45,10 @@ export const Bag = () => {
   const checkoutInFlightRef = useRef(false);
 
   const readyItems = items.filter((i): i is ReadyCartItem => i.status === "ready");
-  const hasPending = items.some((i) => i.status === "pending");
+  // Checkout is disabled for both - a still-adding item obviously isn't
+  // ready to sell yet, and an actively-updating one shouldn't be sold out
+  // from under its own in-flight attribute change (Erik's call).
+  const hasPending = items.some((i) => i.status === "pending") || readyItems.some((i) => i.updatingSince);
 
   // Only ticking while the bag is actually open - no point re-rendering a
   // closed modal's contents once a second. Also drives each pending item's
@@ -284,9 +292,22 @@ export const Bag = () => {
                     <div>
                       <div className="text-sm">{item.song}</div>
                       <div className="text-xs text-gray-medium">{toFriendlyDate(item.showDate)}</div>
-                      {item.status === "ready" && item.lockedAt && (
+                      {item.status === "ready" && !item.updatingSince && item.lockedAt && (
                         <div className="text-xs text-gray-medium">
                           Locked for {msToTime(now - item.lockedAt)}
+                        </div>
+                      )}
+                      {/* "Update Attributes" in flight - same progress
+                          treatment as a still-pending add below, just a
+                          shorter step list (nothing's being (re-)claimed). */}
+                      {item.status === "ready" && item.updatingSince && (
+                        <div className="flex items-center gap-1.5 text-xs text-dol-yellow">
+                          <AnimatedDonut sizeInPixels={12} />
+                          <span>
+                            {UPDATE_PROGRESS_STEPS[
+                              getProgressStepIndex(item.updatingSince, now, UPDATE_PROGRESS_STEPS.length)
+                            ]}
+                          </span>
                         </div>
                       )}
                       {item.status === "pending" && (
