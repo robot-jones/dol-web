@@ -82,7 +82,7 @@ export async function POST(
   ) {
     return success({ success: false, reason: "NOT_LOCKED" });
   }
-  const { lockedSerial, imageCid: oldImageCid, metadataCid: oldMetadataCid } = performance;
+  const { lockedSerial, imageCid: oldImageCid, metadataCid: oldMetadataCid, attributes: oldAttributes } = performance;
 
   const { imageCid: newImageCid, metadataCid: newMetadataCid } = await publishNftMetadata(
     hfbCollectionId,
@@ -90,15 +90,22 @@ export async function POST(
     showDate,
     parsedPosition,
     accountId,
-    attributes
+    attributes,
+    oldAttributes && oldImageCid ? { previousAttributes: oldAttributes, imageCid: oldImageCid } : undefined
   );
+  // When only the inscription changed, publishNftMetadata reuses oldImageCid
+  // as-is rather than publishing a new one - the unpin calls below must not
+  // treat that reused CID as orphaned/superseded, since it's still (and was
+  // always) the currently-referenced image.
+  const imageWasReused = Boolean(newImageCid) && newImageCid === oldImageCid;
+
   if (!newImageCid || !newMetadataCid) {
     // publishNftMetadata never throws - always reports whatever it managed
     // to publish. Nothing's been persisted anywhere yet (unlike prepare,
     // which stores a lone imageCid for releaseClaim to find later) - this
     // item isn't being released, so a half-published attempt has nothing
     // to be found by. Unpin it directly instead of leaving it dangling.
-    if (newImageCid) {
+    if (newImageCid && !imageWasReused) {
       const unpinned = await unpinFile(newImageCid);
       if (!unpinned) {
         console.error("Failed to unpin orphaned image from a failed update:", {
@@ -114,9 +121,14 @@ export async function POST(
   const updateResult = await updateClaimedAttributes(showDate, parsedPosition, accountId, attributes);
   if (!updateResult.success) {
     // Lost the race - the claim moved on (released or sold) between the
-    // read above and this write. The newly published CIDs never got
-    // referenced anywhere - unpin them rather than leave them orphaned.
-    await Promise.all([unpinFile(newImageCid), unpinFile(newMetadataCid)]);
+    // read above and this write. The newly published metadata never got
+    // referenced anywhere - unpin it rather than leave it orphaned. The
+    // image is skipped when reused: it's still the one the still-current
+    // record points to.
+    await Promise.all([
+      imageWasReused ? Promise.resolve(true) : unpinFile(newImageCid),
+      unpinFile(newMetadataCid),
+    ]);
     return success({ success: false, reason: "NOT_LOCKED" });
   }
 
@@ -142,8 +154,10 @@ export async function POST(
 
   // Everything downstream succeeded - the old CIDs are genuinely
   // superseded now, safe to unpin (unconditional/best-effort, same
-  // posture as releaseClaim's own cleanup).
-  if (oldImageCid) {
+  // posture as releaseClaim's own cleanup). Skip the image when it was
+  // reused (inscription-only update) - oldImageCid === newImageCid there,
+  // it's still in active use, not superseded.
+  if (oldImageCid && !imageWasReused) {
     const unpinned = await unpinFile(oldImageCid);
     if (!unpinned) {
       console.error("Failed to unpin superseded image after update:", { showDate, position: parsedPosition, cid: oldImageCid });

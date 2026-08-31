@@ -16,7 +16,6 @@ import {
   HederaChainId,
 } from "@hashgraph/hedera-wallet-connect";
 import type { ActionContext } from "@erikmuir/dol-lib/types";
-import { sleep } from "@erikmuir/dol-lib/utils";
 import { fetchJson } from "@/utils";
 import { WalletConnectContext } from "./context";
 import { PurchaseNftItem, WalletInterface } from "./wallet-interface";
@@ -177,9 +176,15 @@ class WalletConnectWallet implements WalletInterface {
     let transactionId: string | undefined;
     try {
       const signer = this.getSigner();
-      await sleep(1000); // is this needed?
-      const signedTx = await tx.signWithSigner(signer);
-      const txResult = await signedTx.executeWithSigner(signer);
+      // Deliberately not signWithSigner() first: executeWithSigner() signs
+      // and submits in a single wallet round-trip (SignAndExecuteTransaction)
+      // regardless of whether tx is already signed - calling signWithSigner
+      // first just adds a wasted, throwaway signature request, which is what
+      // was causing HashPack to show two separate "Approve transaction"
+      // modals per purchase (found live 2026-08-31: the first approval
+      // resolved instantly with no on-chain effect - a bare signature - and
+      // only the second one actually signed-and-submitted).
+      const txResult = await tx.executeWithSigner(signer);
       transactionId = txResult.transactionId.toString();
       const txReceipt = await txResult.getReceiptWithSigner(signer);
       success = txReceipt?.status.toString() === "SUCCESS";

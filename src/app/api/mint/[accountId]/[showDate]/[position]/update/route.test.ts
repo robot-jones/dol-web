@@ -64,8 +64,51 @@ describe("/api/mint/[accountId]/[showDate]/[position]/update POST", () => {
       "1998-07-29",
       1,
       "0.0.1",
-      expect.objectContaining({ song: "Test" })
+      expect.objectContaining({ song: "Test" }),
+      // No reuse hint - the mocked performance record above has no stored
+      // `attributes`, so there's nothing to diff against.
+      undefined
     );
+  });
+
+  it("passes a reuse hint (old attributes + old imageCid) when the performance already has stored attributes, so publishNftMetadata can skip re-rendering an inscription-only change", async () => {
+    getPerformanceMock.mockResolvedValue({
+      lockedBy: "0.0.1",
+      lockedSerial: 7,
+      imageCid: "bafy-old-img",
+      metadataCid: "bafy-old-json",
+      attributes: { song: "Test", bgColor: "#000000" },
+    });
+
+    await call("0.0.1", "1998-07-29", "1", { song: "Test", bgColor: "#000000", inscription: "for jenny" });
+
+    expect(publishNftMetadataMock).toHaveBeenCalledWith(
+      "0.0.token",
+      7,
+      "1998-07-29",
+      1,
+      "0.0.1",
+      expect.objectContaining({ inscription: "for jenny" }),
+      { previousAttributes: { song: "Test", bgColor: "#000000" }, imageCid: "bafy-old-img" }
+    );
+  });
+
+  it("doesn't unpin the old image when publishNftMetadata reuses it (inscription-only update)", async () => {
+    getPerformanceMock.mockResolvedValue({
+      lockedBy: "0.0.1",
+      lockedSerial: 7,
+      imageCid: "bafy-old-img",
+      metadataCid: "bafy-old-json",
+      attributes: { song: "Test", bgColor: "#000000" },
+    });
+    // Simulates publishNftMetadata reusing the old image: same imageCid
+    // comes back, only metadataCid is actually new.
+    publishNftMetadataMock.mockResolvedValue({ imageCid: "bafy-old-img", metadataCid: "bafy-new-json" });
+
+    await call("0.0.1", "1998-07-29", "1", { song: "Test", bgColor: "#000000", inscription: "for jenny" });
+
+    expect(unpinFileMock).not.toHaveBeenCalledWith("bafy-old-img");
+    expect(unpinFileMock).toHaveBeenCalledWith("bafy-old-json");
   });
 
   it("submits the on-chain metadata update using the newly published CID", async () => {
