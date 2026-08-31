@@ -47,6 +47,7 @@ import {
   useTrack,
   useWalletInterface,
 } from "@/hooks";
+import { PerformanceInscription } from "./PerformanceInscription";
 
 export const Performance = (): React.ReactNode => {
   const pathname = usePathname();
@@ -170,9 +171,19 @@ export const Performance = (): React.ReactNode => {
   // performance was on screen before, letting PerformanceImage render a
   // stale image/attributes for an instant instead of the loading state
   // while the new performance's own data is still in flight.
+  //
+  // inscription reset alongside them for the same reason, but for a
+  // different symptom: bgColor/donut/subject always get a fresh value on
+  // navigation either way (randomizeAttributes for an unminted performance,
+  // the metadata effect for a minted one), but inscription has no such
+  // per-navigation source when the new performance is unminted - without
+  // this, it would silently carry over from whatever performance was
+  // viewed last, pre-filling the input with someone else's text right
+  // before a permanent on-chain mint.
   useEffect(() => {
     setShowCustomizableAttributes(false);
     setPageLoaded(false);
+    setInscription("");
   }, [date, position]);
 
   // Set showCustomizableAttributes and pageLoaded based on loading states
@@ -323,6 +334,7 @@ export const Performance = (): React.ReactNode => {
             loading={trackLoading}
             className="absolute top-4 left-4 right-4 z-[5]"
           />
+          <PerformanceInscription isShown={Boolean(serial)} inscription={inscription} />
         </div>
         <MintAction
           showDate={date}
@@ -345,12 +357,12 @@ export const Performance = (): React.ReactNode => {
         />
       </div>
 
-      <HowMintingWorksNote show={isAvailable} />
+      <HowMintingWorksNote isShown={isAvailable} />
 
-      <CustomizableAttributesSection show={showCustomizableAttributes && !serial} {...customizableAttributesProps} />
+      <CustomizableAttributesSection isShown={showCustomizableAttributes && !serial} {...customizableAttributesProps} />
 
       <Disclosure summary="Details">
-        <CustomizableAttributesSection show={showCustomizableAttributes && Boolean(serial)} {...customizableAttributesProps} />
+        <CustomizableAttributesSection isShown={showCustomizableAttributes && Boolean(serial)} {...customizableAttributesProps} />
 
         <SectionHeader text="Fixed NFT Attributes" />
         <FixedAttributes
