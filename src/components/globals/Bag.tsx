@@ -2,15 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MdAutorenew, MdShoppingBag } from "react-icons/md";
+import { MdShoppingBag } from "react-icons/md";
 import { NftId, TokenId, TransferTransaction } from "@hashgraph/sdk";
 import { msToTime, toFriendlyDate } from "@erikmuir/dol-lib/utils";
 import {
-  cartItemKey,
   CLAIM_PROGRESS_STEPS,
-  CUSTOMIZABLE_ATTRIBUTE_KEYS,
   getProgressStepIndex,
   ReadyCartItem,
+  UPDATE_PROGRESS_STEPS,
 } from "@/cart";
 import { AnimatedDonut } from "@/components/common/AnimatedDonut";
 import { useAccountStatus } from "@/hooks/use-account-status";
@@ -18,7 +17,6 @@ import { useCart } from "@/hooks/use-cart";
 import { useWalletInterface } from "@/hooks/use-wallet-interface";
 import { fetchStandardJson } from "@/utils";
 import type { ServerCheckoutResponse } from "@/app/api/mint/[accountId]/checkout/route";
-import type { ServerUpdateResponse } from "@/app/api/mint/[accountId]/[showDate]/[position]/update/route";
 import { DolButton } from "../common/DolButton";
 import { PageNote } from "../common/PageNote";
 import Modal from "./Modal";
@@ -30,15 +28,7 @@ export const Bag = () => {
   const hfbCollectionId = `${process.env.NEXT_PUBLIC_HFB_COLLECTION_ID}`;
   const hbarPrice = process.env.NEXT_PUBLIC_HFB_HBAR_PRICE || "46";
   const router = useRouter();
-  const {
-    items,
-    removeItem,
-    lastError,
-    clearLastError,
-    bagOpenRequestCount,
-    draftAttributes,
-    applyUpdatedAttributes,
-  } = useCart();
+  const { items, removeItem, lastError, clearLastError, bagOpenRequestCount } = useCart();
   const { accountId, walletInterface } = useWalletInterface();
   const { mutateAccountStatus } = useAccountStatus(accountId);
   const [open, setOpen] = useState(false);
@@ -46,11 +36,6 @@ export const Bag = () => {
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  // Per-item in-flight guard for "Update Bag Item" - a Set rather than one
-  // shared boolean, since several ready items could each have their own
-  // pending update at once (unlike checkout, which is one action for the
-  // whole bag).
-  const [updatingKeys, setUpdatingKeys] = useState<Set<string>>(new Set());
   // Synchronous guard against a double-click on the confirm modal's
   // Confirm button starting checkout twice - `checkingOut` alone doesn't
   // catch this, since its own setState hasn't necessarily been applied yet
@@ -60,7 +45,10 @@ export const Bag = () => {
   const checkoutInFlightRef = useRef(false);
 
   const readyItems = items.filter((i): i is ReadyCartItem => i.status === "ready");
-  const hasPending = items.some((i) => i.status === "pending");
+  // Checkout is disabled for both - a still-adding item obviously isn't
+  // ready to sell yet, and an actively-updating one shouldn't be sold out
+  // from under its own in-flight attribute change (Erik's call).
+  const hasPending = items.some((i) => i.status === "pending") || readyItems.some((i) => i.updatingSince);
 
   // Only ticking while the bag is actually open - no point re-rendering a
   // closed modal's contents once a second. Also drives each pending item's
@@ -115,55 +103,6 @@ export const Bag = () => {
         body: JSON.stringify({ reason: "USER_CANCELLED" }),
       }
     ).catch((err) => console.error("Failed to release bag item's claim:", err));
-  };
-
-  // "Update Bag Item" (CART.md): only true once a *different* draft has
-  // actually landed for this item (MintAction.tsx syncs one in while its
-  // performance page is open) - covers both "no page open for this item"
-  // (no draft entry at all) and "page open but nothing's actually changed"
-  // (draft equals what's already published) in one check, so the refresh
-  // icon simply doesn't render rather than rendering disabled/inert.
-  const isDirty = (item: ReadyCartItem): boolean => {
-    const draft = draftAttributes[cartItemKey(item.showDate, item.position)];
-    if (!draft) return false;
-    return CUSTOMIZABLE_ATTRIBUTE_KEYS.some((key) => draft[key] !== item.attributes?.[key]);
-  };
-
-  const handleUpdateClick = async (item: ReadyCartItem) => {
-    const key = cartItemKey(item.showDate, item.position);
-    const draft = draftAttributes[key];
-    if (!draft || !accountId || updatingKeys.has(key)) return;
-
-    setUpdatingKeys((prev) => new Set(prev).add(key));
-    try {
-      const response = await fetchStandardJson<ServerUpdateResponse>(
-        `/api/mint/${accountId}/${item.showDate}/${item.position}/update`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draft),
-        }
-      );
-      if (response.success) {
-        applyUpdatedAttributes(item.showDate, item.position, draft);
-      } else {
-        // NOT_LOCKED here means the claim moved on entirely (released or
-        // sold) since this draft was captured - a stale display bug the
-        // same class as CartValidator's, not something this click can fix
-        // by retrying. Left for CartValidator's own periodic re-check to
-        // clean up rather than duplicating that logic here.
-        setNotice(`Failed to update ${item.song}'s attributes. Please try again.`);
-      }
-    } catch (err) {
-      console.error("Update bag item request failed:", err);
-      setNotice(`Failed to update ${item.song}'s attributes. Please try again.`);
-    } finally {
-      setUpdatingKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
   };
 
   // Never have both Modals mounted at once - each one's ClickAwayListener
@@ -353,9 +292,22 @@ export const Bag = () => {
                     <div>
                       <div className="text-sm">{item.song}</div>
                       <div className="text-xs text-gray-medium">{toFriendlyDate(item.showDate)}</div>
-                      {item.status === "ready" && item.lockedAt && (
+                      {item.status === "ready" && !item.updatingSince && item.lockedAt && (
                         <div className="text-xs text-gray-medium">
                           Locked for {msToTime(now - item.lockedAt)}
+                        </div>
+                      )}
+                      {/* "Update Attributes" in flight - same progress
+                          treatment as a still-pending add below, just a
+                          shorter step list (nothing's being (re-)claimed). */}
+                      {item.status === "ready" && item.updatingSince && (
+                        <div className="flex items-center gap-1.5 text-xs text-dol-yellow">
+                          <AnimatedDonut sizeInPixels={12} />
+                          <span>
+                            {UPDATE_PROGRESS_STEPS[
+                              getProgressStepIndex(item.updatingSince, now, UPDATE_PROGRESS_STEPS.length)
+                            ]}
+                          </span>
                         </div>
                       )}
                       {item.status === "pending" && (
@@ -366,31 +318,14 @@ export const Bag = () => {
                       )}
                     </div>
                     {item.status === "ready" && (
-                      <div className="flex flex-col items-end gap-1">
-                        {isDirty(item) && (
-                          <button
-                            type="button"
-                            aria-label={`Update ${item.song}`}
-                            title="Push your latest edits for this item"
-                            disabled={updatingKeys.has(cartItemKey(item.showDate, item.position))}
-                            onClick={() => handleUpdateClick(item)}
-                            className="p-0 bg-transparent border-0 text-dol-yellow hover:scale-125 duration-300 disabled:opacity-50 disabled:hover:scale-100"
-                          >
-                            <MdAutorenew
-                              size={16}
-                              className={updatingKeys.has(cartItemKey(item.showDate, item.position)) ? "animate-spin" : undefined}
-                            />
-                          </button>
-                        )}
-                        <DolButton
-                          size="sm"
-                          color="gray"
-                          outline
-                          onClick={() => handleRemoveClick(item)}
-                        >
-                          Remove
-                        </DolButton>
-                      </div>
+                      <DolButton
+                        size="sm"
+                        color="gray"
+                        outline
+                        onClick={() => handleRemoveClick(item)}
+                      >
+                        Remove
+                      </DolButton>
                     )}
                   </li>
                 ))}

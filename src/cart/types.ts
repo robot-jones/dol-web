@@ -36,18 +36,18 @@ export type ReadyCartItem = {
   // LockedForNote does today on a single performance page.
   lockedAt?: number;
   // The last attributes successfully published for this item (initially
-  // whatever "Add to Bag" sent, then whatever "Update Bag Item" last
-  // pushed) - the dirty-check baseline the Bag compares a live draft
-  // against (CartContextValue.draftAttributes) to decide whether there's
-  // actually anything new to push. Optional so an item already in
-  // sessionStorage from before this field existed doesn't break - it just
-  // won't show an update icon until re-added.
+  // whatever "Add to Bag" sent, then whatever "Update Attributes" last
+  // pushed) - the dirty-check baseline MintAction.tsx compares its live
+  // picker state against to decide whether to show "Update Attributes" at
+  // all. Optional so an item already in sessionStorage from before this
+  // field existed doesn't break - it just won't offer an update until
+  // re-added.
   attributes?: PerformanceAttributes;
+  // Date.now() when an update-attributes request was kicked off - unset
+  // once it resolves (success or failure). Drives the Bag's progress
+  // display the same way PendingCartItem.addedAt does, and doubles as the
+  // "already in flight, don't offer to update again" guard.
+  updatingSince?: number;
 };
 
 export type CartItem = PendingCartItem | ReadyCartItem;
-
-// Shared key format for anything keyed by "which performance", so
-// CartContext's draftAttributes map and its lookups (Bag.tsx) agree on the
-// same string without each reimplementing the join.
-export const cartItemKey = (showDate: string, position: number): string => `${showDate}:${position}`;

@@ -298,80 +298,92 @@ describe("useCart", () => {
     expect(JSON.parse(sessionStorage.getItem("dol-cart")!)).toEqual([readyItem1]);
   });
 
-  describe("Update Bag Item", () => {
-    it("setDraftAttributes stores a draft keyed by showDate/position", async () => {
+  describe("Update Attributes", () => {
+    const seedReady = async () => {
       const { result } = renderUseCart();
       await waitFor(() => expect(result.current.items).toEqual([]));
-
-      act(() => {
-        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
-      });
-
-      expect(result.current.draftAttributes["1998-07-29:1"]).toEqual({ bgColor: "#ffffff" });
-    });
-
-    it("setDraftAttributes for a second item doesn't clobber the first", async () => {
-      const { result } = renderUseCart();
-      await waitFor(() => expect(result.current.items).toEqual([]));
-
-      act(() => {
-        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
-        result.current.setDraftAttributes("1998-07-29", 2, { bgColor: "#000000" } as never);
-      });
-
-      expect(result.current.draftAttributes["1998-07-29:1"]).toEqual({ bgColor: "#ffffff" });
-      expect(result.current.draftAttributes["1998-07-29:2"]).toEqual({ bgColor: "#000000" });
-    });
-
-    it("applyUpdatedAttributes sets the ready item's attributes snapshot and clears its draft", async () => {
-      const { result } = renderUseCart();
-      await waitFor(() => expect(result.current.items).toEqual([]));
-
       act(() => {
         result.current.addPendingItem(readyItem1.showDate, readyItem1.position, readyItem1.song);
         result.current.resolvePendingItem(readyItem1.showDate, readyItem1.position, readyItem1.serial, readyItem1.lockedAt, {
           bgColor: "#000000",
         } as never);
-        result.current.setDraftAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
       });
+      return result;
+    };
 
+    it("startUpdatingItem stamps the ready item with an updatingSince timestamp", async () => {
+      const result = await seedReady();
+
+      const before = Date.now();
       act(() => {
-        result.current.applyUpdatedAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+        result.current.startUpdatingItem(readyItem1.showDate, readyItem1.position);
       });
 
-      expect((result.current.items[0] as ReadyCartItem).attributes).toEqual({ bgColor: "#ffffff" });
-      expect(result.current.draftAttributes["1998-07-29:1"]).toBeUndefined();
+      const updatingSince = (result.current.items[0] as ReadyCartItem).updatingSince;
+      expect(updatingSince).toBeGreaterThanOrEqual(before);
+      expect(updatingSince).toBeLessThanOrEqual(Date.now());
     });
 
-    it("applyUpdatedAttributes is a no-op on cart items when the item isn't there any more, but still clears the draft", async () => {
+    it("startUpdatingItem is a no-op on a pending (not yet ready) item", async () => {
       const { result } = renderUseCart();
       await waitFor(() => expect(result.current.items).toEqual([]));
 
       act(() => {
-        result.current.setDraftAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
-        result.current.applyUpdatedAttributes("1998-07-29", 1, { bgColor: "#ffffff" } as never);
+        result.current.addPendingItem("1998-07-29", 1, "Runaway Jim");
+        result.current.startUpdatingItem("1998-07-29", 1);
       });
 
-      expect(result.current.items).toEqual([]);
-      expect(result.current.draftAttributes["1998-07-29:1"]).toBeUndefined();
+      expect((result.current.items[0] as { updatingSince?: number }).updatingSince).toBeUndefined();
     });
 
-    // Deliberately in-memory only (CartContext's own documented design) -
-    // a stale draft from a previous session must never make the Bag's
-    // update icon appear with nothing live behind it.
-    it("never persists draftAttributes to sessionStorage", async () => {
-      const { result } = renderUseCart();
-      await waitFor(() => expect(result.current.items).toEqual([]));
+    it("finishUpdatingItem sets the new published attributes and clears updatingSince", async () => {
+      const result = await seedReady();
 
       act(() => {
-        result.current.addPendingItem(readyItem1.showDate, readyItem1.position, readyItem1.song);
-        result.current.resolvePendingItem(readyItem1.showDate, readyItem1.position, readyItem1.serial, readyItem1.lockedAt);
-        result.current.setDraftAttributes(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+        result.current.startUpdatingItem(readyItem1.showDate, readyItem1.position);
       });
-      await waitFor(() => expect(sessionStorage.getItem("dol-cart")).not.toBeNull());
+      act(() => {
+        result.current.finishUpdatingItem(readyItem1.showDate, readyItem1.position, { bgColor: "#ffffff" } as never);
+      });
 
-      const stored = JSON.parse(sessionStorage.getItem("dol-cart")!);
-      expect(stored[0].draftAttributes).toBeUndefined();
+      const item = result.current.items[0] as ReadyCartItem;
+      expect(item.attributes).toEqual({ bgColor: "#ffffff" });
+      expect(item.updatingSince).toBeUndefined();
+    });
+
+    it("failUpdatingItem clears updatingSince, leaves published attributes untouched, and records lastError", async () => {
+      const result = await seedReady();
+
+      act(() => {
+        result.current.startUpdatingItem(readyItem1.showDate, readyItem1.position);
+      });
+      act(() => {
+        result.current.failUpdatingItem(readyItem1.showDate, readyItem1.position, "Failed to update this item's attributes. Please try again.");
+      });
+
+      const item = result.current.items[0] as ReadyCartItem;
+      expect(item.attributes).toEqual({ bgColor: "#000000" });
+      expect(item.updatingSince).toBeUndefined();
+      expect(result.current.lastError).toBe("Failed to update this item's attributes. Please try again.");
+    });
+
+    // A page reload kills the in-flight request's promise chain the same
+    // way it does for a still-pending add - the item itself is still a
+    // perfectly valid claim (its attributes are whatever was last actually
+    // confirmed), so only the stale flag needs stripping, not the item.
+    it("drops a stale updatingSince on hydration instead of showing 'still updating' forever", async () => {
+      sessionStorage.setItem(
+        "dol-cart",
+        JSON.stringify([{ ...readyItem1, updatingSince: Date.now() - 60_000 }])
+      );
+
+      const { result } = renderUseCart();
+      await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+      const item = result.current.items[0] as ReadyCartItem;
+      expect(item.updatingSince).toBeUndefined();
+      expect(item.serial).toBe(readyItem1.serial);
+      expect(result.current.lastError).toBeNull();
     });
   });
 });
