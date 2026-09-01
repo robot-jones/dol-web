@@ -1,6 +1,7 @@
 import { useWalletInterface } from "@/hooks/use-wallet-interface";
 import { openWalletConnectModal } from "@/wallet";
 import { LogSection } from "./LogSection";
+import { MintedPerformancesSection } from "./MintedPerformancesSection";
 import { DolButton } from "@/components/common/DolButton";
 
 export default function DukesLog(): React.ReactElement {
@@ -36,6 +37,7 @@ export default function DukesLog(): React.ReactElement {
           <ConnectWalletButton />
         )}
         <LogSection title="Duke's Actions" logKey={`${process.env.NEXT_PUBLIC_TREASURY_ACCOUNT}`} />
+        <MintedPerformancesSection />
       </div>
     </div>
   );

@@ -37,7 +37,7 @@ export const LogSection = ({
   useEffect(() => {
     if (auditLogs) {
       const sortedLogs = [...auditLogs].sort(sortByTimestampDescending);
-      const pageSize = 8;
+      const pageSize = 10;
       setPages(chunkArray(sortedLogs, pageSize));
       setCurrentPage(0); // Reset to first page when logs change
     }
@@ -151,9 +151,7 @@ export const LogSection = ({
         return (
           <tr
             key={index}
-            className={twMerge(
-              log.success ? "bg-dol-green/10" : "bg-dol-red/10"
-            )}
+            className={twMerge(log.success ? "" : "bg-dol-red/10")}
           >
             <td className={twMerge(row, border, monospace)}>{dateTime}</td>
             <td className={twMerge(row, border, monospace)}>{log.action}</td>
@@ -187,7 +185,7 @@ export const LogSection = ({
   const isLastPage = currentPage === pages.length - 1;
 
   return (
-    <div className="rounded w-full max-h-[400px] overflow-hidden border border-gray-dark-2">
+    <div className="rounded w-full overflow-hidden border border-gray-dark-2">
       <div
         role="button"
         tabIndex={0}
@@ -208,9 +206,11 @@ export const LogSection = ({
       </div>
       {isExpanded && (
         <>
-          <table className="block w-full max-h-[303px] overflow-auto">
-            <tbody>{rows}</tbody>
-          </table>
+          <div className="max-h-[370px] overflow-auto">
+            <table className="w-full">
+              <tbody>{rows}</tbody>
+            </table>
+          </div>
           {pages.length > 1 && (
             <div className="flex justify-center items-center gap-0 p-0 bg-gray-dark-2">
               <button

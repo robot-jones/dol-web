@@ -3,6 +3,7 @@ export * from "./use-app-config-status";
 export * from "./use-audit-logs";
 export * from "./use-cart";
 export * from "./use-mint-status";
+export * from "./use-minted-performances";
 export * from "./use-mirror";
 export * from "./use-performances";
 export * from "./use-reviews";
