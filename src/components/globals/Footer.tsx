@@ -40,7 +40,7 @@ export const Footer = () => {
             </a>
           </span>
         </div>
-        <div className="text-xs text-gray-medium text-center">
+        <div className="text-xs text-gray-medium text-center text-balance">
           &copy; {year} Duke of Lizards &mdash; unofficial fan project, not affiliated with or endorsed by Phish
         </div>
       </div>
