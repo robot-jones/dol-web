@@ -31,7 +31,7 @@ export const SearchBar = ({
       onClick={() => inputRef.current?.focus()}
       className={twMerge(
         "relative inline-flex items-center mx-auto w-full px-4 py-1.5",
-        "bg-gray-dark border border-gray-dark-2 rounded-full",
+        "bg-gray-extra-dark border border-gray-dark-2 rounded-full",
         "focus-within:ring-2 focus-within:ring-dol-blue focus-within:border-dol-blue",
         "transition-colors duration-200",
         disabled ? "cursor-not-allowed" : "",
