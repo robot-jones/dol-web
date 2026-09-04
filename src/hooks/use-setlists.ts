@@ -4,10 +4,11 @@ import useSWR from "swr";
 import { Setlist } from "@erikmuir/dol-lib/types";
 import { fetchStandardJson } from "@/utils";
 
-export function useSetlists(date: string) {
+export function useSetlists(date: string, refreshInterval?: number) {
   const { data, isLoading, error } = useSWR<Setlist[]>(
     `/api/setlists/${date}`,
-    fetchStandardJson
+    fetchStandardJson,
+    { refreshInterval }
   );
   return { setlists: data, setlistsLoading: isLoading, setlistsError: error };
 }

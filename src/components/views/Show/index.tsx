@@ -18,11 +18,17 @@ export const Show = (): React.ReactElement => {
   const pathname = usePathname();
   const pathParts = pathname.split("/");
   const date = pathParts.at(-1) ?? "";
+  const daysUntilShow = daysUntil(date);
+  // Today's show is the one where the setlist is actively filling in - poll
+  // so fans watching along don't have to manually refresh.
+  const isToday = daysUntilShow === 0;
   const { performances } = usePerformances(date);
-  const { setlists, setlistsLoading } = useSetlists(date);
+  const { setlists, setlistsLoading } = useSetlists(
+    date,
+    isToday ? 60_000 : undefined
+  );
   const { reviews } = useReviewsByDate(date);
   const { show, showLoading } = useShow(date);
-  const daysUntilShow = daysUntil(date);
 
   // Strictly future (the day of the show itself falls through to the
   // setlist/pending view below, not the countdown - once doors open, fans
