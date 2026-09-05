@@ -6,7 +6,7 @@ import { useSetlists } from "@/hooks/use-setlists";
 import { useReviewsByDate } from "@/hooks/use-reviews";
 import { useShow } from "@/hooks/use-shows";
 import { usePerformances } from "@/hooks/use-performances";
-import { isRecentShow } from "@/utils";
+import { isRecentShow, isShowDay } from "@/utils";
 import { Error } from "../Error";
 import { ShowHeader } from "./ShowHeader";
 import { SongRow } from "./SongRow";
@@ -20,8 +20,10 @@ export const Show = (): React.ReactElement => {
   const date = pathParts.at(-1) ?? "";
   const daysUntilShow = daysUntil(date);
   // Today's show is the one where the setlist is actively filling in - poll
-  // so fans watching along don't have to manually refresh.
-  const isToday = daysUntilShow === 0;
+  // so fans watching along don't have to manually refresh. Not the same
+  // check as daysUntilShow above - see isShowDay for why a strict same-day
+  // comparison goes false mid-show.
+  const isToday = isShowDay(date);
   const { performances } = usePerformances(date);
   const { setlists, setlistsLoading } = useSetlists(
     date,
